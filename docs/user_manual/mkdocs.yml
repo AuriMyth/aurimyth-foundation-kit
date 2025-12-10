@@ -1,0 +1,112 @@
+site_name: AuriMyth Foundation Kit
+site_description: 现代化微服务基础架构框架用户开发手册
+site_author: AuriMyth Team
+repo_url: https://github.com/AuriMythNeo/aurimyth-foundation-kit
+repo_name: aurimyth-foundation-kit
+docs_dir: docs
+
+theme:
+  name: material
+  language: zh
+  logo: null
+  favicon: null
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换暗色模式
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 切换亮色模式
+  
+  features:
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.tabs.link
+    - content.code.copy
+    - content.code.annotate
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - toc.follow
+
+plugins:
+  - search:
+      lang: 
+        - zh
+        - en
+
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: python
+          class: python
+          format: !!python/name:pymdownx.superfences.fence_code_format
+        - name: bash
+          class: bash
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      use_pygments: true
+      linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.arithmatex
+  - pymdownx.emoji:
+      emoji_index: !!python/name:pymdownx.emoji.twemoji
+      emoji_generator: !!python/name:pymdownx.emoji.to_svg
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - toc:
+      permalink: true
+      title: 目录
+  - tables
+  - admonition
+  - attr_list
+  - def_list
+
+nav:
+  - 首页: index.md
+  - 快速开始: 00-quick-start.md
+  - 基础部分:
+    - Framework 架构: 01-intro-detailed.md
+    - 安装指南: 02-installation-guide.md
+    - 服务器运行: 03-server-deployment.md
+    - 项目结构: 04-project-structure.md
+    - 配置管理: 05-configuration-advanced.md
+  - 核心功能:
+    - 依赖注入容器: 06-di-container-complete.md
+    - 应用组件系统: 07-components-detailed.md
+    - HTTP 接口: 08-http-advanced.md
+    - 错误处理: 09-error-handling-guide.md
+    - 事务管理: 10-transaction-management.md
+    - 数据库操作: 11-database-complete.md
+  - 高级功能:
+    - 缓存系统: 12-caching-advanced.md
+    - 异步任务: 13-async-tasks-guide.md
+    - 事件驱动: 14-events-driven.md
+    - 定时调度: 15-scheduler-guide.md
+    - RPC 微服务: 16-rpc-microservices.md
+    - WebSocket: 17-websocket-guide.md
+    - 对象存储: 18-storage-guide.md
+    - 国际化: 19-i18n-guide.md
+    - 数据库迁移: 20-migration-guide.md
+    - 日志系统: 21-logging-complete.md
+  - 最佳实践: 22-best-practices.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/AuriMythNeo/aurimyth-foundation-kit
+      name: GitHub
+
+copyright: Copyright &copy; 2024 AuriMyth Team
+
+

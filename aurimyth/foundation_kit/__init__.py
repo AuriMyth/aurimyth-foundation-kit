@@ -19,8 +19,14 @@
 # 测试框架
 from . import application, common, domain, infrastructure, testing, toolkit
 
-__version__ = "0.1.0"
+# 版本号由 hatch-vcs 自动生成
+try:
+    from ._version import __version__
+except ImportError:
+    __version__ = "0.0.0.dev0"
+
 __all__ = [
+    "__version__",
     "application",
     "common",
     "domain",

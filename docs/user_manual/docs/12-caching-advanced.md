@@ -1,0 +1,294 @@
+# 12. 缓存系统高级用法
+
+请参考 [00-quick-start.md](./00-quick-start.md) 第 12 章的基础用法。
+
+## 高级特性
+
+### 装饰器缓存
+
+```python
+from aurimyth.foundation_kit.infrastructure.cache import CacheManager
+
+cache = CacheManager.get_instance()
+
+# 自动缓存函数结果
+@cache.cached(expire=60, key_prefix="user_profile")
+async def get_user_profile(user_id: str):
+    # 第一次调用时执行，结果缓存 60 秒
+    # 后续调用直接返回缓存结果
+    return await db.get_user(user_id)
+```
+
+### 缓存失效
+
+```python
+# 手动清除缓存
+await cache.delete("user:123")
+
+# 清除前缀匹配的所有缓存
+await cache.delete_pattern("user:*")
+
+# 清除所有缓存
+await cache.flush_all()
+```
+
+### 缓存配置
+
+在 `.env` 中配置：
+
+```bash
+# 内存缓存（开发环境）
+CACHE_TYPE=memory
+CACHE_MAX_SIZE=1000
+
+# Redis（生产环境）
+CACHE_TYPE=redis
+CACHE_REDIS_URL=redis://localhost:6379/0
+CACHE_REDIS_POOL_SIZE=10
+```
+
+## 缓存策略
+
+### Cache-Aside（推荐）
+
+```python
+async def get_user(user_id: str):
+    cache_key = f"user:{user_id}"
+    
+    # 1. 尝试从缓存获取
+    user = await cache.get(cache_key)
+    if user:
+        return user
+    
+    # 2. 缓存未命中，从数据库获取
+    user = await db.get_user(user_id)
+    if user:
+        # 3. 写入缓存
+        await cache.set(cache_key, user, expire=300)
+    
+    return user
+```
+
+### Write-Through（强一致性）
+
+```python
+async def update_user(user_id: str, data: dict):
+    # 1. 更新数据库
+    user = await db.update_user(user_id, data)
+    
+    # 2. 更新缓存
+    cache_key = f"user:{user_id}"
+    await cache.set(cache_key, user, expire=300)
+    
+    return user
+```
+
+### Write-Behind（高性能）
+
+```python
+async def update_user_async(user_id: str, data: dict):
+    # 1. 更新缓存
+    cache_key = f"user:{user_id}"
+    await cache.set(cache_key, data, expire=300)
+    
+    # 2. 异步更新数据库
+    await task_queue.send(update_user_in_db_task, user_id=user_id, data=data)
+    
+    return data
+```
+
+## 常见模式
+
+### 列表缓存
+
+```python
+async def get_user_list(page: int = 1, size: int = 20):
+    cache_key = f"users:page:{page}:size:{size}"
+    
+    # 尝试从缓存获取
+    result = await cache.get(cache_key)
+    if result:
+        return result
+    
+    # 从数据库获取
+    users, total = await db.list_users(page=page, size=size)
+    result = {"users": users, "total": total}
+    
+    # 缓存 1 小时
+    await cache.set(cache_key, result, expire=3600)
+    return result
+```
+
+### 计数缓存
+
+```python
+async def get_user_count():
+    cache_key = "users:count"
+    
+    count = await cache.get(cache_key)
+    if count is not None:
+        return count
+    
+    count = await db.count_users()
+    await cache.set(cache_key, count, expire=300)
+    return count
+
+async def increment_user_count():
+    cache_key = "users:count"
+    
+    # 原子增加
+    await cache.increment(cache_key, 1)
+    
+    # 也要更新数据库
+    await db.increment_count()
+```
+
+### 热数据预热
+
+```python
+async def warm_cache():
+    """应用启动时预热缓存"""
+    
+    # 加载常用数据
+    configs = await db.get_all_configs()
+    for config in configs:
+        cache_key = f"config:{config.key}"
+        await cache.set(cache_key, config, expire=3600)
+    
+    logger.info(f"已预热 {len(configs)} 个配置到缓存")
+
+# 在组件中调用
+class CacheWarmupComponent(Component):
+    name = "cache_warmup"
+    enabled = True
+    depends_on = ["cache"]
+    
+    async def setup(self, app: FoundationApp, config):
+        await warm_cache()
+```
+
+## 性能优化
+
+### 缓存穿透（Cache Penetration）
+
+问题：查询不存在的数据，频繁绕过缓存
+
+解决方案：
+
+```python
+async def get_user_safe(user_id: str):
+    cache_key = f"user:{user_id}"
+    
+    # 使用特殊值标记不存在的数据
+    user = await cache.get(cache_key)
+    if user == "NOT_FOUND":
+        return None
+    if user:
+        return user
+    
+    user = await db.get_user(user_id)
+    if user:
+        await cache.set(cache_key, user, expire=300)
+    else:
+        # 缓存不存在的标记（过期时间短）
+        await cache.set(cache_key, "NOT_FOUND", expire=60)
+    
+    return user
+```
+
+### 缓存雪崩（Cache Avalanche）
+
+问题：大量缓存同时过期
+
+解决方案：
+
+```python
+async def get_user(user_id: str):
+    cache_key = f"user:{user_id}"
+    
+    user = await cache.get(cache_key)
+    if user:
+        return user
+    
+    user = await db.get_user(user_id)
+    if user:
+        # 随机过期时间，避免同时过期
+        import random
+        expire = 300 + random.randint(0, 60)
+        await cache.set(cache_key, user, expire=expire)
+    
+    return user
+```
+
+### 缓存击穿（Cache Breakdown）
+
+问题：热点数据失效时，并发请求击穿缓存
+
+解决方案：
+
+```python
+import asyncio
+
+lock = asyncio.Lock()
+
+async def get_hot_data(data_id: str):
+    cache_key = f"hot:{data_id}"
+    
+    data = await cache.get(cache_key)
+    if data:
+        return data
+    
+    # 使用分布式锁，只有一个进程刷新缓存
+    async with lock:
+        # 再次检查缓存（双重检查）
+        data = await cache.get(cache_key)
+        if data:
+            return data
+        
+        # 从数据库获取
+        data = await db.get_hot_data(data_id)
+        await cache.set(cache_key, data, expire=300)
+    
+    return data
+```
+
+## 监控和调试
+
+### 缓存统计
+
+```python
+async def get_cache_stats():
+    stats = await cache.get_stats()
+    return {
+        "hits": stats.hits,
+        "misses": stats.misses,
+        "hit_rate": stats.hits / (stats.hits + stats.misses),
+        "keys_count": stats.keys_count,
+        "memory_usage": stats.memory_usage,
+    }
+```
+
+### 缓存日志
+
+```python
+from aurimyth.foundation_kit.common.logging import logger
+
+async def get_user_with_logging(user_id: str):
+    cache_key = f"user:{user_id}"
+    
+    user = await cache.get(cache_key)
+    if user:
+        logger.debug(f"缓存命中: {cache_key}")
+        return user
+    
+    logger.debug(f"缓存未命中: {cache_key}")
+    user = await db.get_user(user_id)
+    if user:
+        await cache.set(cache_key, user, expire=300)
+    
+    return user
+```
+
+---
+
+**总结**：充分利用缓存可以显著提升应用性能。选择合适的缓存策略和过期时间，注意缓存穿透、雪崩、击穿等问题，才能构建稳定高效的系统。

@@ -1,0 +1,845 @@
+# AuriMyth Foundation Kit 用户开发手册
+
+欢迎使用 AuriMyth Foundation Kit！这是一款专为构建现代化、高性能微服务而设计的 Python 基础设施框架。
+
+## 目录（快速开始）
+
+> 📖 **详细文档**：本目录下还有更详细的技术指南
+
+1. [简介](#1-简介) - 查看详细版：[01-intro-detailed.md](./01-intro-detailed.md)
+2. [快速上手](#2-快速上手) - 查看详细版：[02-installation-guide.md](./02-installation-guide.md)
+3. [服务器运行](#3-服务器运行) - 查看详细版：[03-server-deployment.md](./03-server-deployment.md)
+4. [项目结构](#4-项目结构) - 查看详细版：[04-project-structure.md](./04-project-structure.md)
+5. [配置](#5-配置) - 查看详细版：[05-configuration-advanced.md](./05-configuration-advanced.md)
+6. [依赖注入](#6-依赖注入) - 查看详细版：[06-di-container-complete.md](./06-di-container-complete.md)
+7. [应用组件](#7-应用组件) - 查看详细版：[07-components-detailed.md](./07-components-detailed.md)
+8. [HTTP 接口](#8-http-接口) - 查看详细版：[08-http-advanced.md](./08-http-advanced.md) （Ingress/Egress 详解）
+9. [错误处理](#9-错误处理) - 查看详细版：[09-error-handling-guide.md](./09-error-handling-guide.md)
+10. [事务管理](#10-事务管理) - 查看详细版：[10-transaction-management.md](./10-transaction-management.md)
+11. [数据库](#11-数据库) - 查看详细版：[11-database-complete.md](./11-database-complete.md)
+12. [缓存](#12-缓存) - 查看详细版：[12-caching-advanced.md](./12-caching-advanced.md)
+13. [异步任务](#13-异步任务) - 查看详细版：[13-async-tasks-guide.md](./13-async-tasks-guide.md)
+14. [事件驱动](#14-事件驱动) - 查看详细版：[14-events-driven.md](./14-events-driven.md)
+15. [定时调度](#15-定时调度) - 查看详细版：[15-scheduler-guide.md](./15-scheduler-guide.md)
+16. [RPC 与服务发现](#16-rpc-与服务发现) - 查看详细版：[16-rpc-microservices.md](./16-rpc-microservices.md)
+17. [WebSocket](#17-websocket) - 查看详细版：[17-websocket-guide.md](./17-websocket-guide.md)
+18. [对象存储](#18-对象存储) - 查看详细版：[18-storage-guide.md](./18-storage-guide.md)
+19. [国际化](#19-国际化) - 查看详细版：[19-i18n-guide.md](./19-i18n-guide.md)
+20. [数据库迁移](#20-数据库迁移) - 查看详细版：[20-migration-guide.md](./20-migration-guide.md)
+21. [日志系统](#21-日志系统) - 查看详细版：[21-logging-complete.md](./21-logging-complete.md)
+22. [最佳实践](#22-最佳实践) - 查看详细版：[22-best-practices.md](./22-best-practices.md)
+
+---
+
+## 1. 简介
+
+AuriMyth Foundation Kit 是 FastAPI 的增强层，提供微服务开发所需的"电池"：
+
+- **统一的组件管理**：生命周期自动管理（数据库、缓存、任务等）
+- **标准化架构**：Domain/Infrastructure 分离，Repository 模式
+- **微服务能力**：服务发现、RPC、分布式事件总线开箱即用
+
+---
+
+## 2. 快速上手
+
+### 安装
+
+```bash
+uv add aurimyth-foundation-kit
+```
+
+### Hello World
+
+```python
+from aurimyth.foundation_kit.application.app.base import FoundationApp
+from aurimyth.foundation_kit.application.config import BaseConfig
+from aurimyth.foundation_kit.application.server import run_app
+from aurimyth.foundation_kit.application.interfaces.egress import BaseResponse
+
+class AppConfig(BaseConfig):
+    pass
+
+app = FoundationApp(
+    title="My Service",
+    version="0.1.0",
+    config=AppConfig()
+)
+
+@app.get("/")
+def hello():
+    return BaseResponse(code=200, message="Hello", data={"message": "Hello AuriMyth!"})
+
+if __name__ == "__main__":
+    run_app(app, host="0.0.0.0", port=8000)
+```
+
+### 运行
+
+```bash
+# 开发模式（热重载）
+aurimyth-server dev
+
+# 生产模式（多进程）
+aurimyth-server prod
+```
+
+---
+
+## 3. 服务器运行
+
+### CLI 命令（推荐）
+
+```bash
+# 开发模式（热重载）
+aurimyth-server dev
+
+# 生产模式（多进程）
+aurimyth-server prod
+```
+
+> 📖 **详细配置**：参考 [03-server-deployment.md](./03-server-deployment.md)
+
+---
+
+## 4. 项目结构
+
+```
+my_service/
+├── main.py                 # 应用入口
+├── config.py               # 配置
+├── api/v1/                 # API 路由
+│   ├── users.py
+│   └── orders.py
+├── services/               # 业务逻辑
+│   ├── user_service.py
+│   └── order_service.py
+├── models/                 # 数据模型
+│   ├── user.py
+│   └── order.py
+├── repositories/           # 数据访问
+│   ├── user_repository.py
+│   └── order_repository.py
+├── schemas/                # Pydantic 模型
+│   ├── user.py
+│   └── order.py
+├── alembic/                # 数据库迁移
+├── .env                    # 环境变量
+├── pyproject.toml
+└── README.md
+```
+
+**分层说明**：
+- `api/`：HTTP 请求处理
+- `services/`：业务逻辑
+- `models/`：SQLAlchemy 模型
+- `repositories/`：数据访问
+- `schemas/`：请求/响应序列化
+
+---
+
+## 5. 配置
+
+### 环境变量（.env）
+
+```bash
+# 服务器
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8000
+
+# 数据库
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/mydb
+DATABASE_POOL_SIZE=10
+
+# 缓存
+CACHE_TYPE=redis
+CACHE_REDIS_URL=redis://localhost:6379/0
+
+# 任务队列
+TASK_BROKER_URL=redis://localhost:6379/0
+
+# 日志
+LOG_LEVEL=INFO
+LOG_DIR=log
+```
+
+### 自定义配置
+
+```python
+from aurimyth.foundation_kit.application.config import BaseConfig
+from pydantic import Field
+
+class MyConfig(BaseConfig):
+    my_feature: bool = Field(default=True)
+```
+
+> 📖 **详细配置**：参考 [05-configuration-advanced.md](./05-configuration-advanced.md)
+
+---
+
+## 6. 依赖注入
+
+Kit 提供企业级 **DI 容器**，支持 3 种生命周期：
+
+| 生命周期 | 说明 | 场景 |
+|---------|------|------|
+| **SINGLETON** | 应用生命周期唯一 | 数据库、缓存、配置 |
+| **SCOPED** | 请求范围内唯一 | 数据库会话 |
+| **TRANSIENT** | 每次创建新实例 | 服务、工具类 |
+
+### 快速开始
+
+```python
+from aurimyth.foundation_kit.infrastructure.di import Container
+
+container = Container.get_instance()
+
+# 注册
+container.register_singleton(DatabaseManager)
+container.register_transient(UserService)
+
+# 解析
+service = container.resolve(UserService)
+```
+
+> 📖 **深入学习**：参考 [06-di-container-complete.md](./06-di-container-complete.md)
+
+---
+
+## 7. 应用组件
+
+组件是生命周期管理单位，统一抽象所有功能单元。
+
+### 内置组件
+
+```python
+from aurimyth.foundation_kit.application.app.components import (
+    RequestLoggingComponent,  # HTTP 请求日志
+    CORSComponent,            # CORS 跨域
+    DatabaseComponent,        # 数据库
+    CacheComponent,           # 缓存
+    TaskComponent,            # 异步任务
+    SchedulerComponent,       # 定时调度
+)
+```
+
+### 自定义组件
+
+```python
+from aurimyth.foundation_kit.application.app.base import Component, FoundationApp
+
+class MyComponent(Component):
+    name = "my_component"
+    enabled = True
+    depends_on = ["cache"]
+    
+    async def setup(self, app: FoundationApp, config):
+        print("初始化...")
+    
+    async def teardown(self, app: FoundationApp):
+        print("清理...")
+```
+
+### 注册组件
+
+```python
+class MyApp(FoundationApp):
+    items = [
+        RequestLoggingComponent,
+        MyComponent,
+    ]
+
+app = MyApp(config=config)
+```
+
+> 📖 **深入学习**：参考 [07-components-detailed.md](./07-components-detailed.md)
+
+---
+
+## 8. HTTP 接口
+
+### 请求模型（Ingress）
+
+```python
+from aurimyth.foundation_kit.application.interfaces.ingress import (
+    BaseRequest,
+    PaginationRequest
+)
+from pydantic import EmailStr, Field
+
+class UserCreateRequest(BaseRequest):
+    username: str = Field(..., min_length=3, max_length=50)
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+```
+
+### 统一响应格式（Egress）
+
+```python
+from aurimyth.foundation_kit.application.interfaces.egress import (
+    BaseResponse,
+    PaginationResponse,
+    Pagination,
+)
+
+# 单个资源
+return BaseResponse(code=200, message="成功", data=user)
+
+# 列表响应
+pagination = Pagination(total=100, items=users, page=1, size=20)
+return PaginationResponse(code=200, message="获取成功", data=pagination)
+```
+
+### 路由示例
+
+```python
+from fastapi import APIRouter, Depends
+from aurimyth.foundation_kit.infrastructure.di import Container
+from aurimyth.foundation_kit.application.interfaces.egress import BaseResponse
+
+router = APIRouter()
+container = Container.get_instance()
+
+def get_user_service():
+    return container.resolve(UserService)
+
+@router.post("/users")
+async def create_user(
+    request: UserCreateRequest,
+    service: UserService = Depends(get_user_service)
+):
+    user = await service.create(request)
+    return BaseResponse(code=200, message="创建成功", data=user)
+```
+
+> 📖 **深入学习**：参考 [08-http-advanced.md](./08-http-advanced.md)
+
+---
+
+## 9. 错误处理
+
+### 异常体系与继承规则
+
+```python
+from aurimyth.foundation_kit.application.errors import (
+    BaseError,
+    NotFoundError,
+    AlreadyExistsError,
+    UnauthorizedError,
+    ForbiddenError,
+)
+
+# ✅ 开发规范：所有服务特定异常都要继承 Foundation Kit 的异常
+class MyServiceError(UnauthorizedError):
+    """服务特定异常必须继承 Foundation Kit 的异常类。"""
+    
+    def __init__(self, message: str, **kwargs):
+        super().__init__(message=message, **kwargs)
+
+@router.get("/users/{user_id}")
+async def get_user(user_id: str):
+    user = await repo.get(user_id)
+    if not user:
+        # Foundation Kit 全局异常处理器会自动转换为 HTTP 404
+        raise NotFoundError(f"用户 {user_id} 不存在")
+    return user
+```
+
+### 异常继承规则和错误代码
+
+**原则**：
+1. 所有异常必须继承 Foundation Kit 的异常类（UnauthorizedError、NotFoundError 等）
+2. 所有错误代码必须继承 Foundation Kit 的 `ErrorCode`，在服务范围内定义
+3. **不覆盖** Foundation Kit 的错误代码（1xxx-4xxx），服务使用 5xxx+ 范围
+
+```python
+# ✅ 正确：定义错误代码枚举，继承 ErrorCode
+from aurimyth.foundation_kit.application.errors.codes import ErrorCode
+
+class IdentityErrorCode(ErrorCode):
+    INVALID_CREDENTIALS = "5001"
+    USER_NOT_FOUND = "5101"
+    DUPLICATE_USER = "5104"
+
+# ✅ 正确：异常继承 Foundation Kit 的异常
+class InvalidCredentialsError(UnauthorizedError):
+    def __init__(self, **kwargs):
+        metadata = kwargs.pop("metadata", {})
+        metadata["error_code"] = IdentityErrorCode.INVALID_CREDENTIALS.value
+        super().__init__(message="用户名或密码错误", metadata=metadata, **kwargs)
+
+# ❌ 错误：不继承 Foundation Kit
+class MyCustomError(Exception):
+    pass
+
+# ❌ 错误：没有调用 super().__init__()
+class BadError(NotFoundError):
+    self.message = message  # 错！
+```
+
+> 📖 **详细规范**：参考 [09-error-handling-guide.md](./09-error-handling-guide.md)
+
+> 📖 **详细说明**：参考 [09-error-handling-guide.md](./09-error-handling-guide.md)
+
+---
+
+## 10. 事务管理
+
+### 推荐方式：装饰器
+
+```python
+from aurimyth.foundation_kit.domain.transaction import transactional
+from sqlalchemy.ext.asyncio import AsyncSession
+
+@transactional
+async def create_user_with_profile(session: AsyncSession, name: str):
+    repo = UserRepository(session)
+    user = await repo.create({"username": name})
+    # 自动提交，异常时自动回滚
+    return user
+```
+
+> 📖 **其他方式**：参考 [10-transaction-management.md](./10-transaction-management.md)
+
+---
+
+## 11. 数据库
+
+### 定义模型
+
+```python
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String
+from aurimyth.foundation_kit.domain.models import UUIDAuditableStateModel
+
+class User(UUIDAuditableStateModel):
+    """用户模型 - 自动获得 UUID 主键、时间戳和软删除功能"""
+    __tablename__ = "users"
+    
+    # UUIDAuditableStateModel 自动提供：
+    # - id: UUID 主键
+    # - created_at: 创建时间
+    # - updated_at: 更新时间
+    # - deleted_at: 软删除时间
+    
+    username: Mapped[str] = mapped_column(String(50), unique=True)
+    email: Mapped[str] = mapped_column(String(100), unique=True)
+```
+
+### 创建仓储
+
+```python
+from aurimyth.foundation_kit.domain.repository.impl import BaseRepository
+
+class UserRepository(BaseRepository[User]):
+    async def get_by_email(self, email: str):
+        return await self.get_by(email=email)
+```
+
+### 在 API 中使用
+
+```python
+from aurimyth.foundation_kit.infrastructure.database import DatabaseManager
+
+db_manager = DatabaseManager.get_instance()
+
+async def get_user_repo(session=Depends(db_manager.get_session)):
+    return UserRepository(session)
+
+@router.get("/users/{user_id}")
+async def get_user(user_id: str, repo=Depends(get_user_repo)):
+    user = await repo.get(user_id)
+    if not user:
+        raise NotFoundError("用户不存在")
+    return BaseResponse(code=200, message="获取成功", data=user)
+```
+
+> 📖 **深入学习**：参考 [11-database-complete.md](./11-database-complete.md)
+
+---
+
+## 12. 缓存
+
+### 基本用法
+
+```python
+from aurimyth.foundation_kit.infrastructure.cache import CacheManager
+
+cache = CacheManager.get_instance()
+
+# 设置
+await cache.set("user:1", {"name": "test"}, expire=300)
+
+# 获取
+user = await cache.get("user:1")
+
+# 删除
+await cache.delete("user:1")
+```
+
+> 📖 **详细说明**：参考 [12-caching-advanced.md](./12-caching-advanced.md)
+
+---
+
+## 13. 异步任务
+
+### 定义任务
+
+```python
+from aurimyth.foundation_kit.infrastructure.tasks.manager import TaskManager
+
+tm = TaskManager.get_instance()
+
+@tm.conditional_task(queue_name="default", max_retries=3)
+async def send_email_task(email: str, content: str):
+    pass
+```
+
+### 调用任务
+
+```python
+# 发送
+send_email_task.send("test@example.com", "Hello!")
+```
+
+> 📖 **详细说明**：参考 [13-async-tasks-guide.md](./13-async-tasks-guide.md)
+
+---
+
+## 14. 事件驱动
+
+### 定义和订阅
+
+```python
+from aurimyth.foundation_kit.infrastructure.events.bus import EventBus
+from aurimyth.foundation_kit.infrastructure.events import Event
+
+class OrderCreatedEvent(Event):
+    order_id: str
+    amount: float
+    
+    @property
+    def event_name(self) -> str:
+        return "order.created"
+
+bus = EventBus.get_instance()
+
+@bus.subscribe(OrderCreatedEvent)
+async def on_order_created(event: OrderCreatedEvent):
+    print(f"订单创建: {event.order_id}")
+```
+
+### 发布事件
+
+```python
+await bus.publish(OrderCreatedEvent(order_id="1001", amount=99.9))
+```
+
+> 📖 **详细说明**：参考 [14-events-driven.md](./14-events-driven.md)
+
+---
+
+## 15. 定时调度
+
+```python
+from aurimyth.foundation_kit.infrastructure.scheduler.manager import SchedulerManager
+from datetime import datetime
+
+scheduler = SchedulerManager.get_instance()
+
+# Cron 任务
+scheduler.add_job(
+    func=daily_report,
+    trigger="cron",
+    hour=2, minute=30,
+    id="daily_report"
+)
+
+# 间隔任务
+scheduler.add_job(
+    func=heartbeat,
+    trigger="interval",
+    seconds=30
+)
+```
+
+> 📖 **详细说明**：参考 [15-scheduler-guide.md](./15-scheduler-guide.md)
+
+---
+
+## 16. RPC 与服务发现
+
+### 配置
+
+```bash
+# 环境变量
+RPC_CLIENT_SERVICES={"order-service": "http://order-service:8000"}
+```
+
+### 发起调用
+
+```python
+from aurimyth.foundation_kit.application.rpc.client import create_rpc_client
+
+client = create_rpc_client(service_name="order-service")
+response = await client.get("/api/v1/orders/123")
+```
+
+### 自动分布式链路追踪
+
+```python
+from aurimyth.foundation_kit.common.logging import get_trace_id, logger
+
+trace_id = get_trace_id()
+logger.info(f"处理请求 | Trace-ID: {trace_id}")
+# RPC 调用会自动添加 X-Trace-ID 请求头
+```
+
+> 📖 **详细说明**：参考 [16-rpc-microservices.md](./16-rpc-microservices.md)
+
+---
+
+## 17. WebSocket
+
+### 基本连接
+
+```python
+from fastapi import APIRouter, WebSocket
+from aurimyth.foundation_kit.infrastructure.database import DatabaseManager
+
+router = APIRouter()
+db_manager = DatabaseManager.get_instance()
+
+@router.websocket("/ws/chat/{room_id}")
+async def websocket_chat(websocket: WebSocket, room_id: str):
+    await websocket.accept()
+    
+    try:
+        while True:
+            data = await websocket.receive_text()
+            
+            async with db_manager.session() as session:
+                repo = MessageRepository(session)
+                await repo.create({"room_id": room_id, "content": data})
+            
+            await websocket.send_json({"status": "ok"})
+    except Exception as e:
+        await websocket.close(code=1011, reason=str(e))
+```
+
+> 📖 **详细说明**：参考 [17-websocket-guide.md](./17-websocket-guide.md)
+
+---
+
+## 18. 对象存储
+
+```python
+from aurimyth.foundation_kit.infrastructure.storage.factory import StorageFactory
+from aurimyth.foundation_kit.infrastructure.storage.base import StorageFile
+
+# 初始化
+storage = await StorageFactory.create(
+    "s3",
+    access_key_id="...",
+    access_key_secret="...",
+    bucket_name="my-bucket"
+)
+
+# 上传
+with open("avatar.png", "rb") as f:
+    url = await storage.upload_file(
+        StorageFile(data=f, object_name="avatars/user_1.png")
+    )
+```
+
+> 📖 **详细说明**：参考 [18-storage-guide.md](./18-storage-guide.md)
+
+---
+
+## 19. 国际化
+
+```python
+from aurimyth.foundation_kit.common.i18n.translator import translate, load_translations
+
+# 加载翻译
+load_translations({
+    "zh_CN": {"error.not_found": "资源 {name} 未找到"},
+    "en_US": {"error.not_found": "Resource {name} not found"}
+})
+
+# 使用
+msg = translate("error.not_found", name="User", locale="zh_CN")
+```
+
+> 📖 **详细说明**：参考 [19-i18n-guide.md](./19-i18n-guide.md)
+
+---
+
+## 20. 数据库迁移
+
+### 自动迁移（推荐）
+
+应用启动时自动执行迁移：
+
+```python
+from aurimyth.foundation_kit.application.app.components import MigrationComponent
+
+class MyApp(FoundationApp):
+    items = [
+        DatabaseComponent,
+        MigrationComponent,  # 自动执行迁移
+        CacheComponent,
+    ]
+
+# 应用启动时自动执行迁移到最新版本
+```
+
+### 手动迁移
+
+```bash
+# 初始化
+alembic init -t async alembic
+
+# 生成迁移
+aurimyth-migrate make -m "Add users table"
+
+# 执行迁移
+aurimyth-migrate up
+
+# 查看状态
+aurimyth-migrate status
+```
+
+> 📖 **详细说明**：参考 [20-migration-guide.md](./20-migration-guide.md)
+
+---
+
+## 21. 日志系统
+
+### 环境变量
+
+```bash
+LOG_LEVEL=INFO
+LOG_DIR=log
+LOG_ROTATION_TIME=00:00
+LOG_RETENTION_DAYS=7
+```
+
+### 使用日志
+
+```python
+from aurimyth.foundation_kit.common.logging import logger, get_trace_id
+
+logger.info("信息")
+logger.warning("警告")
+logger.error("错误")
+
+# 自动包含 Trace ID
+trace_id = get_trace_id()
+logger.info(f"处理请求 | Trace-ID: {trace_id}")
+```
+
+> 📖 **详细说明**：参考 [21-logging-complete.md](./21-logging-complete.md)
+
+---
+
+## 22. 最佳实践
+
+### 使用 Foundation Kit 预定义模型
+
+Foundation Kit 提供多个预定义模型组合，推荐直接使用而不是 `Base`：
+
+```python
+from aurimyth.foundation_kit.domain.models import (
+    UUIDAuditableStateModel,  # 【推荐】UUID主键 + 时间戳 + 软删除
+    UUIDModel,                # UUID主键 + 时间戳
+    Model,                    # 整数主键 + 时间戳
+    FullFeaturedUUIDModel,    # 完整功能：UUID + 时间戳 + 软删除 + 乐观锁
+)
+
+# ✅ 推荐：使用 UUIDAuditableStateModel
+class Identity(UUIDAuditableStateModel):
+    """身份模型 - 自动获得以下字段：
+    - id: UUID 主键
+    - created_at: 创建时间
+    - updated_at: 更新时间  
+    - deleted_at: 软删除时间（0 未删除，>0 已删除时间戳）
+    """
+    __tablename__ = "identity_identities"
+    username: Mapped[str] = mapped_column(String(100))
+
+# ❌ 不推荐：直接使用 Base
+class BadModel(Base):
+    __tablename__ = "bad_model"
+    # 需要手动添加 id、created_at 等字段
+```
+
+**预定义模型对比**：
+
+| 模型 | UUID 主键 | 时间戳 | 软删除 | 乐观锁 | 用途 |
+|------|----------|--------|--------|--------|------|
+| **UUIDAuditableStateModel** | ✅ | ✅ | ✅ | ❌ | 【推荐】大多数业务模型 |
+| **UUIDModel** | ✅ | ✅ | ❌ | ❌ | 不需要软删除的模型 |
+| **Model** | ❌ | ✅ | ❌ | ❌ | 使用整数主键 |
+| **FullFeaturedUUIDModel** | ✅ | ✅ | ✅ | ✅ | 需要完整功能的关键业务 |
+
+### 贫血模型 + Repository 模式
+
+推荐使用"贫血模型"设计（只包含字段，无关系定义），所有查询由 Repository 层负责：
+
+```python
+# ✅ 模型层（纯数据结构）
+class Tenant(UUIDAuditableStateModel):
+    __tablename__ = "tenants"
+    name: Mapped[str] = mapped_column(String(100))
+    # 不定义 relationship，不定义 ForeignKey
+
+# ✅ 仓库层（负责所有查询）
+class TenantRepository(BaseRepository[Tenant]):
+    async def get_with_members(self, tenant_id: GUID):
+        # 显式 join，可控的查询
+        stmt = select(Tenant).where(Tenant.id == tenant_id)
+        return await self.session.scalar(stmt)
+    
+    async def list_members(self, tenant_id: GUID):
+        # 显式查询成员，避免隐式 N+1
+        stmt = select(TenantMembership).where(TenantMembership.tenant_id == tenant_id)
+        return await self.session.scalars(stmt)
+```
+
+**好处**：
+- 模型简洁，易于维护
+- 避免隐式查询导致的 N+1 问题
+- 查询逻辑集中在 Repository，便于优化
+- 完全掌控数据加载策略
+
+### 避免 N+1 查询
+
+```python
+from sqlalchemy.orm import selectinload
+
+class UserRepository(BaseRepository[User]):
+    async def list_with_orders(self):
+        stmt = select(User).options(selectinload(User.orders))
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+```
+
+### Event Bus vs Task Queue
+
+| 特性 | Event Bus | Task Queue |
+|------|-----------|-----------|
+| 消费者 | 多个 | 单个 |
+| 延迟 | 毫秒级 | 秒级 |
+| 重试 | 无 | 有 |
+| 用途 | 通知、分析 | 数据处理、支付 |
+
+### 依赖管理
+
+```bash
+uv init my-service
+uv add sqlalchemy asyncpg redis
+uv lock
+```
+
+> 📖 **详细说明**：参考 [22-best-practices.md](./22-best-practices.md)

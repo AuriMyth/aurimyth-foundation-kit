@@ -1,6 +1,6 @@
 [project]
 name = "aurimyth-foundation-kit"
-version = "0.1.0"
+dynamic = ["version"]
 description = "AuriMyth Foundation Kit - 核心基础架构工具包"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -28,6 +28,9 @@ dev = [
     "pytest-cov>=7.0.0",
     "ruff>=0.14.7",
     "mypy>=1.19.0",
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.7.0",
+    "materialx>=1.39.0",
 ]
 db-postgresql = [
     "asyncpg>=0.31.0",
@@ -116,16 +119,25 @@ aurimyth-server = "aurimyth.foundation_kit.commands.server:server_cli"
 [build-system]
 requires = [
     "hatchling",
+    "hatch-vcs",
 ]
 build-backend = "hatchling.build"
 
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "aurimyth/foundation_kit/_version.py"
+
 [tool.hatch.build.targets.wheel]
 packages = [
-    "aurimyth.foundation_kit",
+    "aurimyth",
 ]
 
 [tool.uv]
 index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+# 启用 keyring 提供者，自动从 keyring 读取凭据
+keyring-provider = "subprocess"
 
 [tool.ruff]
 target-version = "py313"
@@ -213,3 +225,10 @@ split-on-trailing-comma = true
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15
+
+[dependency-groups]
+dev = [
+    "materialx>=1.39.4",
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.0",
+]

@@ -2,11 +2,9 @@ name: Deploy Docs
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'docs/user_manual/**'
-      - '.github/workflows/docs.yml'
+    tags:
+      - 'docs'
+      - 'docs-*'
   workflow_dispatch:
 
 permissions:

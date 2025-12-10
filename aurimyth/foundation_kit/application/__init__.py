@@ -25,14 +25,16 @@ from aurimyth.foundation_kit.infrastructure.events import (
 
 from . import interfaces, rpc
 
-# 应用框架和组件系统
+# 应用框架、中间件和组件系统
 from .app import (
     CacheComponent,
     Component,
-    CORSComponent,
+    CORSMiddleware,
     DatabaseComponent,
     FoundationApp,
-    RequestLoggingComponent,
+    Middleware,
+    MigrationComponent,
+    RequestLoggingMiddleware,
     SchedulerComponent,
     TaskComponent,
 )
@@ -43,7 +45,7 @@ from .config import (
     LogSettings,
     ServerSettings,
 )
-from .constants import ComponentName, SchedulerMode, ServiceType
+from .constants import ComponentName, MiddlewareName, SchedulerMode, ServiceType
 
 # HTTP 中间件（FastAPI 中间件）
 from .middleware import (
@@ -63,42 +65,50 @@ from .server import ApplicationServer, run_app
 __all__ = [
     # 配置
     "BaseConfig",
-    "CORSComponent",
     "CORSSettings",
-    "CacheComponent",
     "CacheSettings",
-    "Component",
+    "LogSettings",
+    "ServerSettings",
     # 常量
     "ComponentName",
+    "MiddlewareName",
+    "SchedulerMode",
+    "ServiceType",
+    # 应用框架
+    "FoundationApp",
+    # 基类
+    "Component",
+    "Middleware",
+    # 中间件
+    "CORSMiddleware",
+    "RequestLoggingMiddleware",
+    # 组件
+    "CacheComponent",
+    "DatabaseComponent",
+    "MigrationComponent",
+    "SchedulerComponent",
+    "TaskComponent",
     # 依赖注入容器
     "Container",
-    "DatabaseComponent",
+    "Lifetime",
+    "Scope",
+    "ServiceDescriptor",
     # 事件系统
     "Event",
     "EventBus",
     "EventConsumer",
     "EventLoggingMiddleware",
     "EventMiddleware",
-    # 应用框架和组件系统
-    "FoundationApp",
-    "Lifetime",
-    "LogSettings",
     # 迁移
     "MigrationManager",
-    "RequestLoggingComponent",
-    # HTTP 中间件
-    "RequestLoggingMiddleware",
-    "SchedulerComponent",
-    "SchedulerMode",
-    "Scope",
-    "ServerSettings",
-    "ServiceDescriptor",
-    "ServiceType",
-    "TaskComponent",
+    # HTTP 中间件装饰器
+    "log_request",
+    # 事务管理
     "TransactionManager",
     "TransactionRequiredError",
     "ensure_transaction",
-    "log_request",
+    "transactional",
+    "transactional_context",
     # RPC通信
     "rpc",
     # 调度器启动器
@@ -107,8 +117,5 @@ __all__ = [
     # 服务器集成
     "ApplicationServer",
     "run_app",
-    # 事务管理
-    "transactional",
-    "transactional_context",
 ]
 

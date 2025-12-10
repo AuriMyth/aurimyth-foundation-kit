@@ -9,9 +9,8 @@
 #   test: 发布到测试 PyPI (https://test.pypi.org)
 #   prod: 发布到正式 PyPI (https://pypi.org) - 默认
 #
-# 版本管理:
-#   版本号通过 Git 标签自动管理（hatch-vcs）
-#   创建新版本: git tag v0.1.0 && git push --tags
+# 前置条件:
+#   需要先运行 ./build.sh 构建包，或确保 dist/ 目录存在
 #
 # Token 配置 (PyPI 已不支持密码登录，必须使用 API Token):
 #   方式 1: 环境变量 UV_PUBLISH_TOKEN
@@ -46,73 +45,60 @@ check_uv() {
     success "uv $(uv --version | head -1)"
 }
 
-# 检查 Git 状态
-check_git() {
-    info "检查 Git 状态..."
-    
-    # 检查是否在 Git 仓库中
-    if ! git rev-parse --git-dir > /dev/null 2>&1; then
-        error "当前目录不是 Git 仓库"
-        exit 1
-    fi
-    
-    # 获取当前版本（从 git describe）
-    if git describe --tags --always > /dev/null 2>&1; then
-        VERSION=$(git describe --tags --always --dirty)
-        info "当前版本: ${CYAN}${VERSION}${NC}"
-    else
-        warning "未找到 Git 标签，将使用 0.0.0.devN 格式版本"
-        VERSION="0.0.0.dev$(git rev-list --count HEAD)"
-        info "开发版本: ${CYAN}${VERSION}${NC}"
-    fi
-    
-    # 检查是否有未提交的更改
-    if [[ -n $(git status --porcelain) ]]; then
-        warning "存在未提交的更改，版本号将带有 +dirty 后缀"
-    fi
-}
-
-# 清理构建产物
-clean() {
-    info "清理旧的构建文件..."
-    rm -rf build/ dist/ *.egg-info aurimyth/*.egg-info aurimyth/foundation_kit/_version.py
-    success "清理完成"
-}
-
-# 构建包
-build() {
-    info "构建包..."
-    uv build
-    
-    # 显示构建产物
-    echo ""
-    info "构建产物:"
-    ls -lh dist/
-    success "构建完成"
-}
-
 # 检查构建产物
-check() {
+check_dist() {
     info "检查构建产物..."
     
     if [ ! -d "dist" ] || [ -z "$(ls -A dist)" ]; then
         error "dist/ 目录不存在或为空"
+        echo ""
+        warning "请先运行 ./build.sh 构建包"
         exit 1
     fi
     
-    # 使用 uvx 运行 twine check
-    uvx twine check dist/*
-    success "检查通过"
+    # 检查文件是否存在
+    WHEEL_FILE=$(ls dist/*.whl 2>/dev/null | head -n 1)
+    SDIST_FILE=$(ls dist/*.tar.gz 2>/dev/null | head -n 1)
+    
+    if [ -z "$WHEEL_FILE" ]; then
+        error "未找到 wheel 文件 (.whl)"
+        warning "请先运行 ./build.sh 构建包"
+        exit 1
+    fi
+    
+    if [ -z "$SDIST_FILE" ]; then
+        error "未找到源码分发文件 (.tar.gz)"
+        warning "请先运行 ./build.sh 构建包"
+        exit 1
+    fi
+    
+    info "找到构建产物:"
+    echo "  - Wheel: $(basename "$WHEEL_FILE")"
+    echo "  - Source: $(basename "$SDIST_FILE")"
 }
 
 # 配置 Token
 setup_token() {
     if [ -z "$UV_PUBLISH_TOKEN" ]; then
-        info "Token 配置方式 (PyPI 必须使用 API Token):"
-        echo "  1. 环境变量: export UV_PUBLISH_TOKEN='pypi-xxxx...'"
-        echo "  2. keyring: keyring set https://upload.pypi.org/legacy/ __token__"
-        echo ""
-        info "获取 Token: https://pypi.org/manage/account/token/"
+        # 尝试从 pypi_key 文件读取
+        if [ -f "pypi_key" ]; then
+            info "从 pypi_key 文件读取 token..."
+            export UV_PUBLISH_TOKEN="$(cat pypi_key | tr -d '\n')"
+        else
+            warning "未设置 UV_PUBLISH_TOKEN 环境变量，也未找到 pypi_key 文件"
+            info "Token 配置方式 (PyPI 必须使用 API Token):"
+            echo "  1. 环境变量: export UV_PUBLISH_TOKEN='pypi-xxxx...'"
+            echo "  2. 创建 pypi_key 文件: echo 'your-token' > pypi_key"
+            echo "  3. keyring: keyring set https://upload.pypi.org/legacy/ __token__"
+            echo ""
+            info "获取 Token: https://pypi.org/manage/account/token/"
+            echo ""
+            read -p "是否继续? (yes/no): " continue_confirm
+            if [ "$continue_confirm" != "yes" ]; then
+                info "已取消发布"
+                exit 0
+            fi
+        fi
     fi
 }
 
@@ -171,14 +157,18 @@ show_help() {
     echo "  test    发布到测试 PyPI"
     echo "  prod    发布到正式 PyPI (默认)"
     echo ""
-    echo "版本管理 (通过 Git 标签):"
-    echo "  git tag v0.1.0          创建标签"
-    echo "  git push --tags         推送标签"
-    echo "  git tag -d v0.1.0       删除本地标签"
+    echo "前置条件:"
+    echo "  需要先运行 ./build.sh 构建包，或确保 dist/ 目录存在"
     echo ""
-echo "Token 配置 (PyPI 必须使用 API Token):"
-    echo "  export UV_PUBLISH_TOKEN='pypi-xxxx...'              环境变量"
-    echo "  keyring set https://upload.pypi.org/legacy/ __token__  keyring 方式"
+    echo "Token 配置 (PyPI 必须使用 API Token):"
+    echo "  方式 1: 环境变量"
+    echo "    export UV_PUBLISH_TOKEN='pypi-xxxx...'"
+    echo ""
+    echo "  方式 2: 创建 pypi_key 文件"
+    echo "    echo 'your-token' > pypi_key"
+    echo ""
+    echo "  方式 3: keyring"
+    echo "    keyring set https://upload.pypi.org/legacy/ __token__"
     echo ""
     echo "获取 Token: https://pypi.org/manage/account/token/"
 }
@@ -213,19 +203,14 @@ main() {
     echo ""
     
     check_uv
-    check_git
     echo ""
     
-    clean
-    echo ""
-    
-    build
-    echo ""
-    
-    check
+    check_dist
     echo ""
     
     setup_token
+    echo ""
+    
     publish
     
     echo ""

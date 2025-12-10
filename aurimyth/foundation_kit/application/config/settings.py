@@ -8,8 +8,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _load_env_file(env_file: str | Path) -> bool:
+    """加载 .env 文件到环境变量。"""
+    return load_dotenv(env_file, override=True)
 
 
 class DatabaseSettings(BaseSettings):
@@ -20,7 +28,7 @@ class DatabaseSettings(BaseSettings):
     """
     
     url: str = Field(
-        default="sqlite:///./app.db",
+        default="sqlite+aiosqlite:///./app.db",
         description="数据库连接字符串"
     )
     echo: bool = Field(
@@ -38,6 +46,10 @@ class DatabaseSettings(BaseSettings):
     pool_recycle: int = Field(
         default=3600,
         description="连接回收时间（秒）"
+    )
+    pool_timeout: int = Field(
+        default=30,
+        description="获取连接超时时间（秒）"
     )
     pool_pre_ping: bool = Field(
         default=True,
@@ -294,8 +306,12 @@ class MigrationSettings(BaseSettings):
         description="Alembic 迁移脚本目录"
     )
     model_modules: list[str] = Field(
-        default_factory=lambda: ["app.models", "app.**.models"],
-        description="模型模块列表（用于自动检测变更）。支持通配符: * 和 **。默认: ['app.models', 'app.**.models']"
+        default_factory=lambda: [
+            "models",
+            "app.models",
+            "app.**.models",
+        ],
+        description="模型模块列表（用于自动检测变更）。支持通配符: * 和 **。"
     )
     auto_create: bool = Field(
         default=True,
@@ -413,10 +429,21 @@ class BaseConfig(BaseSettings):
     """基础配置类。
     
     所有应用配置的基类，提供通用配置项。
-    使用 pydantic-settings 自动从环境变量和 .env 文件加载配置。
+    初始化时自动从 .env 文件加载环境变量，然后由 pydantic-settings 读取环境变量。
     
     注意：Application 层配置完全独立，不依赖 Infrastructure 层。
     """
+    
+    def __init__(self, _env_file: str | Path = ".env", **kwargs) -> None:
+        """初始化配置。
+        
+        Args:
+            _env_file: .env 文件路径，默认为当前目录下的 .env
+            **kwargs: 其他配置参数
+        """
+        # 在 pydantic-settings 初始化之前加载 .env 文件
+        _load_env_file(_env_file)
+        super().__init__(**kwargs)
     
     # ========== 服务器与网络 ==========
     # 服务器配置
@@ -463,8 +490,6 @@ class BaseConfig(BaseSettings):
     rpc_service: RPCServiceSettings = Field(default_factory=RPCServiceSettings)
     
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )

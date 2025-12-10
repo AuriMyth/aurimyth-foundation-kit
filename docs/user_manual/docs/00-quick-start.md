@@ -12,22 +12,22 @@
 4. [项目结构](#4-项目结构) - 查看详细版：[04-project-structure.md](./04-project-structure.md)
 5. [配置](#5-配置) - 查看详细版：[05-configuration-advanced.md](./05-configuration-advanced.md)
 6. [依赖注入](#6-依赖注入) - 查看详细版：[06-di-container-complete.md](./06-di-container-complete.md)
-7. [应用组件](#7-应用组件) - 查看详细版：[07-components-detailed.md](./07-components-detailed.md)
-8. [HTTP 接口](#8-http-接口) - 查看详细版：[08-http-advanced.md](./08-http-advanced.md) （Ingress/Egress 详解）
-9. [错误处理](#9-错误处理) - 查看详细版：[09-error-handling-guide.md](./09-error-handling-guide.md)
-10. [事务管理](#10-事务管理) - 查看详细版：[10-transaction-management.md](./10-transaction-management.md)
-11. [数据库](#11-数据库) - 查看详细版：[11-database-complete.md](./11-database-complete.md)
-12. [缓存](#12-缓存) - 查看详细版：[12-caching-advanced.md](./12-caching-advanced.md)
-13. [异步任务](#13-异步任务) - 查看详细版：[13-async-tasks-guide.md](./13-async-tasks-guide.md)
-14. [事件驱动](#14-事件驱动) - 查看详细版：[14-events-driven.md](./14-events-driven.md)
-15. [定时调度](#15-定时调度) - 查看详细版：[15-scheduler-guide.md](./15-scheduler-guide.md)
-16. [RPC 与服务发现](#16-rpc-与服务发现) - 查看详细版：[16-rpc-microservices.md](./16-rpc-microservices.md)
-17. [WebSocket](#17-websocket) - 查看详细版：[17-websocket-guide.md](./17-websocket-guide.md)
-18. [对象存储](#18-对象存储) - 查看详细版：[18-storage-guide.md](./18-storage-guide.md)
-19. [国际化](#19-国际化) - 查看详细版：[19-i18n-guide.md](./19-i18n-guide.md)
-20. [数据库迁移](#20-数据库迁移) - 查看详细版：[20-migration-guide.md](./20-migration-guide.md)
-21. [日志系统](#21-日志系统) - 查看详细版：[21-logging-complete.md](./21-logging-complete.md)
-22. [最佳实践](#22-最佳实践) - 查看详细版：[22-best-practices.md](./22-best-practices.md)
+7. [中间件和组件](#7-中间件和组件) - 查看详细版：[07-middleware-guide.md](./07-middleware-guide.md) / [08-components-detailed.md](./08-components-detailed.md)
+8. [HTTP 接口](#8-http-接口) - 查看详细版：[09-http-advanced.md](./09-http-advanced.md) （Ingress/Egress 详解）
+9. [错误处理](#9-错误处理) - 查看详细版：[10-error-handling-guide.md](./10-error-handling-guide.md)
+10. [事务管理](#10-事务管理) - 查看详细版：[11-transaction-management.md](./11-transaction-management.md)
+11. [数据库](#11-数据库) - 查看详细版：[12-database-complete.md](./12-database-complete.md)
+12. [缓存](#12-缓存) - 查看详细版：[13-caching-advanced.md](./13-caching-advanced.md)
+13. [异步任务](#13-异步任务) - 查看详细版：[14-async-tasks-guide.md](./14-async-tasks-guide.md)
+14. [事件驱动](#14-事件驱动) - 查看详细版：[15-events-driven.md](./15-events-driven.md)
+15. [定时调度](#15-定时调度) - 查看详细版：[16-scheduler-guide.md](./16-scheduler-guide.md)
+16. [RPC 与服务发现](#16-rpc-与服务发现) - 查看详细版：[17-rpc-microservices.md](./17-rpc-microservices.md)
+17. [WebSocket](#17-websocket) - 查看详细版：[18-websocket-guide.md](./18-websocket-guide.md)
+18. [对象存储](#18-对象存储) - 查看详细版：[19-storage-guide.md](./19-storage-guide.md)
+19. [国际化](#19-国际化) - 查看详细版：[20-i18n-guide.md](./20-i18n-guide.md)
+20. [数据库迁移](#20-数据库迁移) - 查看详细版：[21-migration-guide.md](./21-migration-guide.md)
+21. [日志系统](#21-日志系统) - 查看详细版：[22-logging-complete.md](./22-logging-complete.md)
+22. [最佳实践](#22-最佳实践) - 查看详细版：[23-best-practices.md](./23-best-practices.md)
 
 ---
 
@@ -206,20 +206,30 @@ service = container.resolve(UserService)
 
 ---
 
-## 7. 应用组件
+## 7. 中间件和组件
 
-组件是生命周期管理单位，统一抽象所有功能单元。
+Kit 将功能单元分为两类：
+- **中间件（Middleware）**：处理 HTTP 请求拦截
+- **组件（Component）**：管理基础设施生命周期
+
+### 内置中间件
+
+```python
+from aurimyth.foundation_kit.application.app.middlewares import (
+    RequestLoggingMiddleware,  # HTTP 请求日志
+    CORSMiddleware,            # CORS 跨域
+)
+```
 
 ### 内置组件
 
 ```python
 from aurimyth.foundation_kit.application.app.components import (
-    RequestLoggingComponent,  # HTTP 请求日志
-    CORSComponent,            # CORS 跨域
     DatabaseComponent,        # 数据库
     CacheComponent,           # 缓存
     TaskComponent,            # 异步任务
     SchedulerComponent,       # 定时调度
+    MigrationComponent,       # 数据库迁移
 )
 ```
 
@@ -240,19 +250,24 @@ class MyComponent(Component):
         print("清理...")
 ```
 
-### 注册组件
+### 注册中间件和组件
 
 ```python
 class MyApp(FoundationApp):
-    items = [
-        RequestLoggingComponent,
+    middlewares = [
+        RequestLoggingMiddleware,
+        CORSMiddleware,
+    ]
+    components = [
+        DatabaseComponent,
+        CacheComponent,
         MyComponent,
     ]
 
 app = MyApp(config=config)
 ```
 
-> 📖 **深入学习**：参考 [07-components-detailed.md](./07-components-detailed.md)
+> 📖 **深入学习**：参考 [07-middleware-guide.md](./07-middleware-guide.md) 和 [08-components-detailed.md](./08-components-detailed.md)
 
 ---
 
@@ -312,7 +327,7 @@ async def create_user(
     return BaseResponse(code=200, message="创建成功", data=user)
 ```
 
-> 📖 **深入学习**：参考 [08-http-advanced.md](./08-http-advanced.md)
+> 📖 **深入学习**：参考 [09-http-advanced.md](./09-http-advanced.md)
 
 ---
 
@@ -377,9 +392,9 @@ class BadError(NotFoundError):
     self.message = message  # 错！
 ```
 
-> 📖 **详细规范**：参考 [09-error-handling-guide.md](./09-error-handling-guide.md)
+> 📖 **详细规范**：参考 [10-error-handling-guide.md](./10-error-handling-guide.md)
 
-> 📖 **详细说明**：参考 [09-error-handling-guide.md](./09-error-handling-guide.md)
+> 📖 **详细说明**：参考 [10-error-handling-guide.md](./10-error-handling-guide.md)
 
 ---
 
@@ -399,7 +414,7 @@ async def create_user_with_profile(session: AsyncSession, name: str):
     return user
 ```
 
-> 📖 **其他方式**：参考 [10-transaction-management.md](./10-transaction-management.md)
+> 📖 **其他方式**：参考 [11-transaction-management.md](./11-transaction-management.md)
 
 ---
 
@@ -454,7 +469,7 @@ async def get_user(user_id: str, repo=Depends(get_user_repo)):
     return BaseResponse(code=200, message="获取成功", data=user)
 ```
 
-> 📖 **深入学习**：参考 [11-database-complete.md](./11-database-complete.md)
+> 📖 **深入学习**：参考 [12-database-complete.md](./12-database-complete.md)
 
 ---
 
@@ -477,7 +492,7 @@ user = await cache.get("user:1")
 await cache.delete("user:1")
 ```
 
-> 📖 **详细说明**：参考 [12-caching-advanced.md](./12-caching-advanced.md)
+> 📖 **详细说明**：参考 [13-caching-advanced.md](./13-caching-advanced.md)
 
 ---
 
@@ -502,7 +517,7 @@ async def send_email_task(email: str, content: str):
 send_email_task.send("test@example.com", "Hello!")
 ```
 
-> 📖 **详细说明**：参考 [13-async-tasks-guide.md](./13-async-tasks-guide.md)
+> 📖 **详细说明**：参考 [14-async-tasks-guide.md](./14-async-tasks-guide.md)
 
 ---
 
@@ -535,7 +550,7 @@ async def on_order_created(event: OrderCreatedEvent):
 await bus.publish(OrderCreatedEvent(order_id="1001", amount=99.9))
 ```
 
-> 📖 **详细说明**：参考 [14-events-driven.md](./14-events-driven.md)
+> 📖 **详细说明**：参考 [15-events-driven.md](./15-events-driven.md)
 
 ---
 
@@ -563,7 +578,7 @@ scheduler.add_job(
 )
 ```
 
-> 📖 **详细说明**：参考 [15-scheduler-guide.md](./15-scheduler-guide.md)
+> 📖 **详细说明**：参考 [16-scheduler-guide.md](./16-scheduler-guide.md)
 
 ---
 
@@ -595,7 +610,7 @@ logger.info(f"处理请求 | Trace-ID: {trace_id}")
 # RPC 调用会自动添加 X-Trace-ID 请求头
 ```
 
-> 📖 **详细说明**：参考 [16-rpc-microservices.md](./16-rpc-microservices.md)
+> 📖 **详细说明**：参考 [17-rpc-microservices.md](./17-rpc-microservices.md)
 
 ---
 
@@ -627,7 +642,7 @@ async def websocket_chat(websocket: WebSocket, room_id: str):
         await websocket.close(code=1011, reason=str(e))
 ```
 
-> 📖 **详细说明**：参考 [17-websocket-guide.md](./17-websocket-guide.md)
+> 📖 **详细说明**：参考 [18-websocket-guide.md](./18-websocket-guide.md)
 
 ---
 
@@ -652,7 +667,7 @@ with open("avatar.png", "rb") as f:
     )
 ```
 
-> 📖 **详细说明**：参考 [18-storage-guide.md](./18-storage-guide.md)
+> 📖 **详细说明**：参考 [19-storage-guide.md](./19-storage-guide.md)
 
 ---
 
@@ -671,7 +686,7 @@ load_translations({
 msg = translate("error.not_found", name="User", locale="zh_CN")
 ```
 
-> 📖 **详细说明**：参考 [19-i18n-guide.md](./19-i18n-guide.md)
+> 📖 **详细说明**：参考 [20-i18n-guide.md](./20-i18n-guide.md)
 
 ---
 
@@ -685,7 +700,7 @@ msg = translate("error.not_found", name="User", locale="zh_CN")
 from aurimyth.foundation_kit.application.app.components import MigrationComponent
 
 class MyApp(FoundationApp):
-    items = [
+    components = [
         DatabaseComponent,
         MigrationComponent,  # 自动执行迁移
         CacheComponent,
@@ -710,7 +725,7 @@ aurimyth-migrate up
 aurimyth-migrate status
 ```
 
-> 📖 **详细说明**：参考 [20-migration-guide.md](./20-migration-guide.md)
+> 📖 **详细说明**：参考 [21-migration-guide.md](./21-migration-guide.md)
 
 ---
 
@@ -739,7 +754,7 @@ trace_id = get_trace_id()
 logger.info(f"处理请求 | Trace-ID: {trace_id}")
 ```
 
-> 📖 **详细说明**：参考 [21-logging-complete.md](./21-logging-complete.md)
+> 📖 **详细说明**：参考 [22-logging-complete.md](./22-logging-complete.md)
 
 ---
 
@@ -842,4 +857,4 @@ uv add sqlalchemy asyncpg redis
 uv lock
 ```
 
-> 📖 **详细说明**：参考 [22-best-practices.md](./22-best-practices.md)
+> 📖 **详细说明**：参考 [23-best-practices.md](./23-best-practices.md)

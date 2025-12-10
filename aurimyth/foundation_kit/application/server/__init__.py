@@ -139,6 +139,9 @@ class ApplicationServer:
         """
         import uvicorn
         
+        # 从 uvicorn 0.30.0 开始，Config.__init__ 不再接受 ``debug`` 参数，
+        # 这里仅在日志中使用 debug 标志，而不再传递给 uvicorn.Config，
+        # 以避免 "unexpected keyword argument 'debug'" 异常。
         return uvicorn.Config(
             app=self.app,
             host=self.host,
@@ -149,7 +152,6 @@ class ApplicationServer:
             loop=self.loop,
             http=self.http,
             interface=self.interface,
-            debug=self.debug,
             access_log=self.access_log,
             use_colors=self.use_colors,
             log_config=self.log_config,

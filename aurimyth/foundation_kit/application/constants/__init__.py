@@ -5,12 +5,13 @@
 
 from __future__ import annotations
 
-from .components import ComponentName
+from .components import ComponentName, MiddlewareName
 from .scheduler import SchedulerMode
 from .service import ServiceType
 
 __all__ = [
     "ComponentName",
+    "MiddlewareName",
     "SchedulerMode",
     "ServiceType",
 ]

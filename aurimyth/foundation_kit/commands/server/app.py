@@ -169,72 +169,91 @@ def run(
 
 @app.command()
 def dev(
-    host: str = typer.Option(
-        "127.0.0.1",
+    host: str | None = typer.Option(
+        None,
         "--host",
         "-h",
-        envvar="SERVER_HOST",
-        help="监听地址",
+        help="监听地址（默认使用配置文件中的 SERVER_HOST）",
     ),
-    port: int = typer.Option(
-        8000,
+    port: int | None = typer.Option(
+        None,
         "--port",
         "-p",
-        envvar="SERVER_PORT",
-        help="监听端口",
+        help="监听端口（默认使用配置文件中的 SERVER_PORT）",
     ),
 ) -> None:
     """启动开发服务器（热重载）。
     
     快捷命令，相当于 run --reload --debug
     
+    配置优先级: 命令行参数 > .env/环境变量 (SERVER_HOST/SERVER_PORT) > 默认值
+    
     示例：
         aurimyth-server dev
         aurimyth-server dev --port 9000
     """
-    # 直接调用 run 函数的逻辑
-    run(
-        host=host,
-        port=port,
-        workers=1,
-        reload=True,
-        reload_dir=["src/"],
-        debug=True,
-        loop="auto",
-        http="auto",
-        ssl_keyfile=None,
-        ssl_certfile=None,
-        no_access_log=False,
-    )
+    from aurimyth.foundation_kit.application.server import ApplicationServer
+    
+    app_instance = _get_app_instance()
+    
+    # 优先使用命令行参数，否则使用 app 配置
+    server_host = host if host is not None else app_instance.config.server.host
+    server_port = port if port is not None else app_instance.config.server.port
+    
+    typer.echo(f"🚀 启动开发服务器...")
+    typer.echo(f"   地址: http://{server_host}:{server_port}")
+    typer.echo(f"   工作进程: 1")
+    typer.echo(f"   热重载: ✅")
+    typer.echo(f"   调试模式: ✅")
+    typer.echo(f"   监控目录: ['./']")
+    
+    try:
+        server = ApplicationServer(
+            app=app_instance,
+            host=server_host,
+            port=server_port,
+            workers=1,
+            reload=True,
+            reload_dirs=["./"],
+            loop="auto",
+            http="auto",
+            debug=True,
+            access_log=True,
+        )
+        server.run()
+    except KeyboardInterrupt:
+        typer.echo("\n👋 服务器已停止")
+    except Exception as e:
+        typer.echo(f"❌ 错误：{e}", err=True)
+        raise typer.Exit(1) from e
 
 
 @app.command()
 def prod(
-    host: str = typer.Option(
-        "0.0.0.0",
+    host: str | None = typer.Option(
+        None,
         "--host",
         "-h",
-        envvar="SERVER_HOST",
-        help="监听地址",
+        help="监听地址（默认使用配置文件中的 SERVER_HOST，或 0.0.0.0）",
     ),
-    port: int = typer.Option(
-        8000,
+    port: int | None = typer.Option(
+        None,
         "--port",
         "-p",
-        envvar="SERVER_PORT",
-        help="监听端口",
+        help="监听端口（默认使用配置文件中的 SERVER_PORT）",
     ),
     workers: int | None = typer.Option(
         None,
         "--workers",
         "-w",
-        envvar="SERVER_WORKERS",
-        help="工作进程数（默认：CPU核心数）",
+        help="工作进程数（默认使用配置文件中的 SERVER_WORKERS，或 CPU 核心数）",
     ),
 ) -> None:
     """启动生产服务器（多进程）。
     
     快捷命令，相当于 run --workers <cpu_count>
+    
+    配置优先级: 命令行参数 > .env/环境变量 > 默认值
     
     示例：
         aurimyth-server prod
@@ -242,24 +261,46 @@ def prod(
     """
     import os as os_module
     
-    # 如果没有指定 workers，使用 CPU 核心数
-    if workers is None:
-        workers = os_module.cpu_count() or 4
+    from aurimyth.foundation_kit.application.server import ApplicationServer
     
-    # 直接调用 run 函数的逻辑
-    run(
-        host=host,
-        port=port,
-        workers=workers,
-        reload=False,
-        reload_dir=None,
-        debug=False,
-        loop="auto",
-        http="auto",
-        ssl_keyfile=None,
-        ssl_certfile=None,
-        no_access_log=False,
-    )
+    app_instance = _get_app_instance()
+    
+    # 优先使用命令行参数，否则使用 app 配置
+    server_host = host if host is not None else app_instance.config.server.host
+    # 生产模式默认监听所有接口
+    if server_host == "127.0.0.1":
+        server_host = "0.0.0.0"
+    server_port = port if port is not None else app_instance.config.server.port
+    server_workers = workers if workers is not None else app_instance.config.server.workers
+    
+    # 如果配置中 workers 也是默认值 1，则使用 CPU 核心数
+    if server_workers <= 1:
+        server_workers = os_module.cpu_count() or 4
+    
+    typer.echo(f"🚀 启动生产服务器...")
+    typer.echo(f"   地址: http://{server_host}:{server_port}")
+    typer.echo(f"   工作进程: {server_workers}")
+    typer.echo(f"   热重载: ❌")
+    typer.echo(f"   调试模式: ❌")
+    
+    try:
+        server = ApplicationServer(
+            app=app_instance,
+            host=server_host,
+            port=server_port,
+            workers=server_workers,
+            reload=False,
+            loop="auto",
+            http="auto",
+            debug=False,
+            access_log=True,
+        )
+        server.run()
+    except KeyboardInterrupt:
+        typer.echo("\n👋 服务器已停止")
+    except Exception as e:
+        typer.echo(f"❌ 错误：{e}", err=True)
+        raise typer.Exit(1) from e
 
 
 def server_cli() -> None:

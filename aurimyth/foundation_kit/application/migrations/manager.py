@@ -18,7 +18,8 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import MetaData, create_engine
+from sqlalchemy import MetaData
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from aurimyth.foundation_kit.common.logging import logger
@@ -205,7 +206,7 @@ class MigrationManager:
         manager = MigrationManager(
             config_path="alembic.ini",
             script_location="alembic",
-            database_url="sqlite:///./app.db",
+            database_url="sqlite+aiosqlite:///./app.db",
             model_modules=["app.models"],
             auto_create=True,
         )
@@ -762,55 +763,60 @@ def downgrade() -> None:
         Returns:
             dict[str, Any]: 迁移状态信息
         """
-        def _get_status():
-            script = ScriptDirectory.from_config(self._alembic_cfg)
-            
-            # 使用传入的数据库 URL
-            engine = create_engine(self._database_url)
-            with engine.connect() as conn:
-                context = MigrationContext.configure(conn)
-                current_rev = context.get_current_revision()
-            
-            head_rev = script.get_current_head()
-            revisions = list(script.walk_revisions())
-            
-            applied = []
-            pending = []
-            unapplied = []
-            
-            # 构建依赖图
-            revision_map = {rev.revision: rev for rev in revisions}
-            visited = set()
-            
-            def traverse(rev_id: str | None):
-                if not rev_id or rev_id in visited:
-                    return
-                visited.add(rev_id)
-                if rev_id in revision_map:
-                    rev = revision_map[rev_id]
-                    if rev_id == current_rev:
-                        applied.append(rev.revision)
-                    elif current_rev:
-                        # 检查是否在当前版本之后
-                        if rev_id not in [r.revision for r in applied]:
-                            pending.append(rev.revision)
-                    else:
-                        unapplied.append(rev.revision)
-                    traverse(rev.down_revision)
-            
-            # 从 head 开始遍历
-            if head_rev:
-                traverse(head_rev)
-            
-            return {
-                "current": current_rev,
-                "head": head_rev,
-                "pending": [r for r in pending if r not in applied],
-                "applied": list(applied),
-                "unapplied": [r for r in unapplied if r not in applied],
-            }
+        script = ScriptDirectory.from_config(self._alembic_cfg)
         
-        return await asyncio.to_thread(_get_status)
+        # 使用异步引擎，通过 run_sync 执行同步操作
+        engine = create_async_engine(self._database_url)
+        current_rev = None
+        
+        try:
+            async with engine.connect() as conn:
+                def _get_current_rev(connection):
+                    context = MigrationContext.configure(connection)
+                    return context.get_current_revision()
+                
+                current_rev = await conn.run_sync(_get_current_rev)
+        finally:
+            await engine.dispose()
+        
+        head_rev = script.get_current_head()
+        revisions = list(script.walk_revisions())
+        
+        applied = []
+        pending = []
+        unapplied = []
+        
+        # 构建依赖图
+        revision_map = {rev.revision: rev for rev in revisions}
+        visited = set()
+        
+        def traverse(rev_id: str | None):
+            if not rev_id or rev_id in visited:
+                return
+            visited.add(rev_id)
+            if rev_id in revision_map:
+                rev = revision_map[rev_id]
+                if rev_id == current_rev:
+                    applied.append(rev.revision)
+                elif current_rev:
+                    # 检查是否在当前版本之后
+                    if rev_id not in [r.revision for r in applied]:
+                        pending.append(rev.revision)
+                else:
+                    unapplied.append(rev.revision)
+                traverse(rev.down_revision)
+        
+        # 从 head 开始遍历
+        if head_rev:
+            traverse(head_rev)
+        
+        return {
+            "current": current_rev,
+            "head": head_rev,
+            "pending": [r for r in pending if r not in applied],
+            "applied": list(applied),
+            "unapplied": [r for r in unapplied if r not in applied],
+        }
     
     async def show(self) -> list[dict[str, str]]:
         """显示所有迁移（类似 Django 的 showmigrations）。

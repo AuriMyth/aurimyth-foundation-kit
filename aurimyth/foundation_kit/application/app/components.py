@@ -1,68 +1,21 @@
 """默认组件实现。
 
-提供所有内置组件的实现。
+提供所有内置基础设施组件的实现。
 """
 
 from __future__ import annotations
 
 from typing import ClassVar
 
-from fastapi.middleware.cors import CORSMiddleware
-
 from aurimyth.foundation_kit.application.app.base import Component, FoundationApp
 from aurimyth.foundation_kit.application.config import BaseConfig
 from aurimyth.foundation_kit.application.constants import ComponentName, SchedulerMode, ServiceType
-from aurimyth.foundation_kit.application.middleware.logging import RequestLoggingMiddleware
 from aurimyth.foundation_kit.application.migrations import MigrationManager
 from aurimyth.foundation_kit.common.logging import logger
 from aurimyth.foundation_kit.infrastructure.cache import CacheManager
 from aurimyth.foundation_kit.infrastructure.database import DatabaseManager
 from aurimyth.foundation_kit.infrastructure.scheduler import SchedulerManager
 from aurimyth.foundation_kit.infrastructure.tasks import TaskManager
-
-
-class RequestLoggingComponent(Component):
-    """请求日志中间件组件。"""
-
-    name = ComponentName.REQUEST_LOGGING
-    enabled = True
-    depends_on: ClassVar[list[str]] = []
-
-    async def setup(self, app: FoundationApp, config: BaseConfig) -> None:
-        """添加请求日志中间件。"""
-        app.add_middleware(RequestLoggingMiddleware)
-        logger.debug("请求日志中间件已启用")
-
-    async def teardown(self, app: FoundationApp) -> None:
-        """无需清理。"""
-        pass
-
-
-class CORSComponent(Component):
-    """CORS 中间件组件。"""
-
-    name = ComponentName.CORS
-    enabled = True
-    depends_on: ClassVar[list[str]] = []
-
-    def can_enable(self, config: BaseConfig) -> bool:
-        """仅当配置了 origins 时启用。"""
-        return self.enabled and bool(config.cors.origins)
-
-    async def setup(self, app: FoundationApp, config: BaseConfig) -> None:
-        """添加 CORS 中间件。"""
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=config.cors.origins,
-            allow_credentials=config.cors.allow_credentials,
-            allow_methods=config.cors.allow_methods,
-            allow_headers=config.cors.allow_headers,
-        )
-        logger.debug("CORS 中间件已启用")
-
-    async def teardown(self, app: FoundationApp) -> None:
-        """无需清理。"""
-        pass
 
 
 class DatabaseComponent(Component):
@@ -243,7 +196,9 @@ class MigrationComponent(Component):
         """
         try:
             # 创建迁移管理器
-            migration_manager = MigrationManager()
+            migration_manager = MigrationManager(
+                database_url=config.database.url,
+            )
             
             # 检查是否有迁移需要执行
             logger.info("🔄 检查数据库迁移...")
@@ -274,9 +229,7 @@ class MigrationComponent(Component):
 
 
 # 设置默认组件
-FoundationApp.items = [
-    RequestLoggingComponent,
-    CORSComponent,
+FoundationApp.components = [
     DatabaseComponent,
     MigrationComponent,
     CacheComponent,
@@ -286,11 +239,9 @@ FoundationApp.items = [
 
 
 __all__ = [
-    "CORSComponent",
     "CacheComponent",
     "DatabaseComponent",
     "MigrationComponent",
-    "RequestLoggingComponent",
     "SchedulerComponent",
     "TaskComponent",
 ]

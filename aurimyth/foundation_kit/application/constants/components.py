@@ -1,6 +1,6 @@
-"""组件名称常量。
+"""中间件和组件名称常量。
 
-定义所有内置和常用组件的标准命名。
+定义所有内置中间件和组件的标准命名。
 """
 
 from __future__ import annotations
@@ -8,15 +8,22 @@ from __future__ import annotations
 from enum import Enum
 
 
+class MiddlewareName(str, Enum):
+    """中间件名称常量。
+
+    所有内置 HTTP 中间件的标准命名。
+    """
+
+    # HTTP 中间件
+    REQUEST_LOGGING = "request_logging"
+    CORS = "cors"
+
+
 class ComponentName(str, Enum):
     """组件名称常量。
 
-    所有内置和常用组件的标准命名。
+    所有内置基础设施组件的标准命名。
     """
-
-    # 中间件组件
-    REQUEST_LOGGING = "request_logging"
-    CORS = "cors"
 
     # 基础设施组件
     DATABASE = "database"
@@ -33,6 +40,7 @@ class ComponentName(str, Enum):
 
 __all__ = [
     "ComponentName",
+    "MiddlewareName",
 ]
 
 

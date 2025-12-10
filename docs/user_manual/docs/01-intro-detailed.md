@@ -83,21 +83,20 @@ async def list_users(repo: UserRepository = Depends(get_user_repo)):
 
 ## 核心概念
 
-### 1. 组件系统（Component System）
+### 1. 中间件和组件系统
 
-组件是生命周期管理单位，统一抽象基础设施的初始化和清理。
+Kit 将功能单元分为两类：
 
-**特点**：
-- 统一的 `setup()` / `teardown()` 接口
-- 自动依赖管理（通过 `depends_on`）
-- 条件启用（通过 `can_enable()`）
+**中间件（Middleware）** - 处理 HTTP 请求拦截：
+- `register()` 同步注册
+- 按 `order` 排序执行
+- 内置：`RequestLoggingMiddleware`、`CORSMiddleware`
 
-**内置组件**：
-- `DatabaseComponent`：数据库连接
-- `CacheComponent`：缓存系统
-- `TaskComponent`：异步任务
-- `SchedulerComponent`：定时调度
-- `RequestLoggingComponent`：HTTP 日志
+**组件（Component）** - 管理基础设施生命周期：
+- `setup()` / `teardown()` 异步接口
+- 自动依赖管理（`depends_on`）
+- 条件启用（`can_enable()`）
+- 内置：`DatabaseComponent`、`CacheComponent`、`TaskComponent`、`SchedulerComponent`
 
 ### 2. 依赖注入容器（DI Container）
 

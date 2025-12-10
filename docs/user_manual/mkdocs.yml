@@ -83,23 +83,24 @@ nav:
     - 配置管理: 05-configuration-advanced.md
   - 核心功能:
     - 依赖注入容器: 06-di-container-complete.md
-    - 应用组件系统: 07-components-detailed.md
-    - HTTP 接口: 08-http-advanced.md
-    - 错误处理: 09-error-handling-guide.md
-    - 事务管理: 10-transaction-management.md
-    - 数据库操作: 11-database-complete.md
+    - 中间件系统: 07-middleware-guide.md
+    - 组件系统: 08-components-detailed.md
+    - HTTP 接口: 09-http-advanced.md
+    - 错误处理: 10-error-handling-guide.md
+    - 事务管理: 11-transaction-management.md
+    - 数据库操作: 12-database-complete.md
   - 高级功能:
-    - 缓存系统: 12-caching-advanced.md
-    - 异步任务: 13-async-tasks-guide.md
-    - 事件驱动: 14-events-driven.md
-    - 定时调度: 15-scheduler-guide.md
-    - RPC 微服务: 16-rpc-microservices.md
-    - WebSocket: 17-websocket-guide.md
-    - 对象存储: 18-storage-guide.md
-    - 国际化: 19-i18n-guide.md
-    - 数据库迁移: 20-migration-guide.md
-    - 日志系统: 21-logging-complete.md
-  - 最佳实践: 22-best-practices.md
+    - 缓存系统: 13-caching-advanced.md
+    - 异步任务: 14-async-tasks-guide.md
+    - 事件驱动: 15-events-driven.md
+    - 定时调度: 16-scheduler-guide.md
+    - RPC 微服务: 17-rpc-microservices.md
+    - WebSocket: 18-websocket-guide.md
+    - 对象存储: 19-storage-guide.md
+    - 国际化: 20-i18n-guide.md
+    - 数据库迁移: 21-migration-guide.md
+    - 日志系统: 22-logging-complete.md
+  - 最佳实践: 23-best-practices.md
 
 extra:
   social:

@@ -1,6 +1,6 @@
 """应用框架基类。
 
-提供 FoundationApp 和 Component 基类。
+提供 FoundationApp、Middleware 和 Component 基类。
 """
 
 from __future__ import annotations
@@ -12,9 +12,9 @@ from typing import Any, ClassVar
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from starlette.middleware import Middleware as StarletteMiddleware
 
 from aurimyth.foundation_kit.application.config import BaseConfig
-from aurimyth.foundation_kit.application.constants import ComponentName
 from aurimyth.foundation_kit.application.errors import global_exception_handler
 from aurimyth.foundation_kit.application.interfaces.egress import SuccessResponse
 from aurimyth.foundation_kit.common.logging import logger, setup_logging
@@ -22,16 +22,80 @@ from aurimyth.foundation_kit.infrastructure.cache import CacheManager
 from aurimyth.foundation_kit.infrastructure.database import DatabaseManager
 
 
-class Component(ABC):
-    """应用组件基类。
+class Middleware(ABC):
+    """HTTP 中间件基类。
 
-    所有功能单元（中间件、数据库、缓存、任务等）都是 Component。
-    支持生命周期管理和依赖声明。
+    用于处理 HTTP 请求的拦截和处理，如 CORS、请求日志等。
+    中间件在应用构造阶段同步注册，在 HTTP 请求处理时执行。
+
+    生命周期：
+    1. ``build()`` - 在应用构造阶段（lifespan 之前）同步调用。
+       返回 Starlette Middleware 实例，由框架统一注册。
 
     设计原则：
-    - 抽象：统一接口处理所有功能单元
-    - 可扩展：用户可以继承或用装饰器定义
-    - 不受限：无依赖关系限制，支持任意组合
+    - 专注 HTTP 请求处理
+    - 同步注册（必须在 lifespan 之前）
+    - 按 order 排序执行
+
+    使用示例:
+        class MyMiddleware(Middleware):
+            name = "my_middleware"
+            enabled = True
+            order = 10  # 数字小的先执行
+
+            def build(self, config: BaseConfig) -> StarletteMiddleware:
+                return StarletteMiddleware(SomeMiddlewareClass, **options)
+    """
+
+    name: str = "middleware"
+    enabled: bool = True
+    order: int = 0  # 执行顺序，数字小的先执行
+
+    def can_enable(self, config: BaseConfig) -> bool:
+        """是否可以启用此中间件。
+
+        子类可以重写此方法以实现条件化启用。
+        默认检查 enabled 属性。
+
+        Args:
+            config: 应用配置
+
+        Returns:
+            是否启用
+        """
+        return self.enabled
+
+    @abstractmethod
+    def build(self, config: BaseConfig) -> StarletteMiddleware:
+        """构建中间件实例。
+
+        返回 Starlette Middleware 实例，由框架在构造 FastAPI 时统一注册。
+
+        Args:
+            config: 应用配置
+
+        Returns:
+            Starlette Middleware 实例
+        """
+        pass
+
+
+class Component(ABC):
+    """基础设施组件基类。
+
+    用于管理基础设施的生命周期，如数据库、缓存、任务队列等。
+    组件在应用启动时异步初始化，在应用关闭时异步清理。
+
+    生命周期：
+    1. ``setup()`` - 在应用启动时（lifespan 开始阶段）异步调用。
+       用于异步初始化（如数据库连接、缓存连接等）。
+    2. ``teardown()`` - 在应用关闭时（lifespan 结束阶段）异步调用。
+       用于清理资源。
+
+    设计原则：
+    - 专注基础设施生命周期管理
+    - 异步初始化和清理
+    - 支持依赖声明和拓扑排序
 
     使用示例:
         class MyService(Component):
@@ -40,7 +104,7 @@ class Component(ABC):
             depends_on = ["database", "cache"]
 
             async def setup(self, app: FoundationApp, config: BaseConfig):
-                # 初始化逻辑
+                # 异步初始化逻辑
                 pass
 
             async def teardown(self, app: FoundationApp):
@@ -68,7 +132,9 @@ class Component(ABC):
 
     @abstractmethod
     async def setup(self, app: FoundationApp, config: BaseConfig) -> None:
-        """组件启动时调用。
+        """组件启动时调用（异步，在 lifespan 开始阶段）。
+
+        用于异步初始化操作，如数据库连接、缓存连接等。
 
         Args:
             app: 应用实例
@@ -78,7 +144,9 @@ class Component(ABC):
 
     @abstractmethod
     async def teardown(self, app: FoundationApp) -> None:
-        """组件关闭时调用。
+        """组件关闭时调用（异步，在 lifespan 结束阶段）。
+
+        用于清理资源。
 
         Args:
             app: 应用实例
@@ -90,17 +158,28 @@ class FoundationApp(FastAPI):
     """优雅、抽象、可扩展的应用框架。
 
     设计特点：
-    - 抽象：所有功能单元统一为 Component，无特殊处理
+    - 分离：中间件和组件分开管理，职责清晰
     - 可扩展：只需改类属性，即可添加/移除/替换功能
-    - 不受限：无固定的初始化步骤，按依赖关系动态排序
+    - 不受限：无固定的初始化步骤，组件按依赖关系动态排序
+
+    中间件（Middleware）：
+        处理 HTTP 请求拦截，如 CORS、请求日志等。
+        在应用构造阶段同步注册，按 order 排序执行。
+
+    组件（Component）：
+        管理基础设施生命周期，如数据库、缓存、任务队列等。
+        在应用启动时异步初始化，按依赖关系拓扑排序。
+
+    默认中间件（可覆盖）:
+        - RequestLoggingMiddleware（请求日志）
+        - CORSMiddleware（跨域处理）
 
     默认组件（可覆盖）:
-        - RequestLoggingComponent
-        - CORSComponent
-        - DatabaseComponent
-        - CacheComponent
-        - TaskComponent
-        - SchedulerComponent
+        - DatabaseComponent（数据库）
+        - CacheComponent（缓存）
+        - TaskComponent（任务队列）
+        - SchedulerComponent（调度器）
+        - MigrationComponent（数据库迁移）
 
     使用示例:
         # 基础应用
@@ -108,17 +187,22 @@ class FoundationApp(FastAPI):
 
         # 自定义应用
         class MyApp(FoundationApp):
-            items = [
-                RequestLoggingComponent,
-                CORSComponent,
+            middlewares = [
+                RequestLoggingMiddleware,
+                CORSMiddleware,
+            ]
+            components = [
                 DatabaseComponent,
                 CacheComponent,
                 MyCustomComponent,
             ]
     """
 
+    # 默认中间件列表（子类可以覆盖）
+    middlewares: ClassVar[list[type[Middleware] | Middleware]] = []
+
     # 默认组件列表（子类可以覆盖）
-    items: ClassVar[list[type[Component] | Component]] = []
+    components: ClassVar[list[type[Component] | Component]] = []
 
     def __init__(
         self,
@@ -155,7 +239,8 @@ class FoundationApp(FastAPI):
             enable_console=config.log.enable_console,
         )
 
-        # 初始化组件管理
+        # 初始化中间件和组件管理
+        self._middlewares: dict[str, Middleware] = {}
         self._components: dict[str, Component] = {}
         self._lifecycle_listeners: dict[str, list[Callable]] = {}
 
@@ -169,27 +254,53 @@ class FoundationApp(FastAPI):
             # 关闭
             await self._on_shutdown()
 
+        # 收集中间件和组件实例并过滤
+        self._collect_middlewares()
+        self._collect_components()
+
+        # 构建中间件实例列表，传给 FastAPI
+        middleware_instances = self._build_middlewares()
+
         # 调用父类构造函数
         super().__init__(
             title=title,
             version=version,
             description=description,
             lifespan=lifespan,
+            middleware=middleware_instances,
             **kwargs,
         )
 
         # 异常处理
         self.add_exception_handler(Exception, global_exception_handler)
 
-        # 注册所有组件
-        self._register_components()
-
         # 设置路由
         self.setup_routes()
 
-    def _register_components(self) -> None:
-        """注册所有组件。"""
-        for item in self.items:
+    def _collect_middlewares(self) -> None:
+        """收集并实例化所有中间件。
+
+        这一步在 super().__init__() 之前执行，只做实例化和过滤，
+        不调用任何需要 app 已完成构造的方法。
+        """
+        for item in self.middlewares:
+            # 支持类或实例
+            if isinstance(item, type):
+                middleware = item()
+            else:
+                middleware = item
+
+            if middleware.can_enable(self._config):
+                self._middlewares[middleware.name] = middleware
+                logger.debug(f"中间件已收集: {middleware.name}")
+
+    def _collect_components(self) -> None:
+        """收集并实例化所有组件。
+
+        这一步在 super().__init__() 之前执行，只做实例化和过滤，
+        不调用任何需要 app 已完成构造的方法。
+        """
+        for item in self.components:
             # 支持类或实例
             if isinstance(item, type):
                 component = item()
@@ -198,7 +309,29 @@ class FoundationApp(FastAPI):
 
             if component.can_enable(self._config):
                 self._components[component.name] = component
-                logger.debug(f"组件已注册: {component.name}")
+                logger.debug(f"组件已收集: {component.name}")
+
+    def _build_middlewares(self) -> list[StarletteMiddleware]:
+        """构建所有中间件实例。
+
+        在 super().__init__() 之前调用，返回中间件实例列表传给 FastAPI。
+        按 order 升序排序，Starlette 会反向构建栈，最后的最先执行。
+
+        Returns:
+            Starlette Middleware 实例列表
+        """
+        # 按 order 降序排序（Starlette 反向构建，所以降序排列后最小的在最外层）
+        sorted_middlewares = sorted(
+            self._middlewares.values(),
+            key=lambda m: m.order,
+            reverse=True,
+        )
+        result = []
+        for middleware in sorted_middlewares:
+            instance = middleware.build(self._config)
+            result.append(instance)
+            logger.debug(f"中间件已构建: {middleware.name}")
+        return result
 
     async def _on_startup(self) -> None:
         """启动所有组件。"""
@@ -374,6 +507,7 @@ class FoundationApp(FastAPI):
 
 
 __all__ = [
-    "Component"
+    "Component",
+    "Middleware",
 ]
 

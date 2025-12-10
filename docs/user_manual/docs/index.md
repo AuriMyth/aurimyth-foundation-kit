@@ -55,9 +55,9 @@ aurimyth-server prod
 
 ## 📚 文档结构
 
-本文档共 22 个章节，分为四个主要部分：
+本文档共 23 个章节，分为四个主要部分：
 
-### 基础部分（5 章）
+### 基础部分（6 章）
 - [快速开始](./00-quick-start.md) - 所有功能的速查手册
 - [Framework 架构](./01-intro-detailed.md) - 理解设计理念
 - [安装指南](./02-installation-guide.md) - 完整的依赖安装
@@ -65,36 +65,37 @@ aurimyth-server prod
 - [项目结构](./04-project-structure.md) - 推荐的项目组织
 - [配置管理](./05-configuration-advanced.md) - 灵活的配置系统
 
-### 核心功能（6 章）
+### 核心功能（7 章）
 - [依赖注入](./06-di-container-complete.md) - DI 容器系统
-- [应用组件](./07-components-detailed.md) - 生命周期管理
-- [HTTP 接口](./08-http-advanced.md) - Ingress/Egress 完整讲解
-- [错误处理](./09-error-handling-guide.md) - 异常体系
-- [事务管理](./10-transaction-management.md) - 4 种事务方式
-- [数据库](./11-database-complete.md) - ORM 和数据访问
+- [中间件系统](./07-middleware-guide.md) - HTTP 请求处理
+- [组件系统](./08-components-detailed.md) - 基础设施生命周期管理
+- [HTTP 接口](./09-http-advanced.md) - Ingress/Egress 完整讲解
+- [错误处理](./10-error-handling-guide.md) - 异常体系
+- [事务管理](./11-transaction-management.md) - 4 种事务方式
+- [数据库](./12-database-complete.md) - ORM 和数据访问
 
 ### 高级功能（10 章）
-- [缓存系统](./12-caching-advanced.md)
-- [异步任务](./13-async-tasks-guide.md)
-- [事件驱动](./14-events-driven.md)
-- [定时调度](./15-scheduler-guide.md)
-- [RPC 微服务](./16-rpc-microservices.md)
-- [WebSocket](./17-websocket-guide.md)
-- [对象存储](./18-storage-guide.md)
-- [国际化](./19-i18n-guide.md)
-- [数据库迁移](./20-migration-guide.md)
-- [日志系统](./21-logging-complete.md)
+- [缓存系统](./13-caching-advanced.md)
+- [异步任务](./14-async-tasks-guide.md)
+- [事件驱动](./15-events-driven.md)
+- [定时调度](./16-scheduler-guide.md)
+- [RPC 微服务](./17-rpc-microservices.md)
+- [WebSocket](./18-websocket-guide.md)
+- [对象存储](./19-storage-guide.md)
+- [国际化](./20-i18n-guide.md)
+- [数据库迁移](./21-migration-guide.md)
+- [日志系统](./22-logging-complete.md)
 
 ### 最佳实践（1 章）
-- [最佳实践](./22-best-practices.md) - 架构、性能、测试
+- [最佳实践](./23-best-practices.md) - 架构、性能、测试
 
 ## ✨ 核心特性
 
-### 统一的组件管理
+### 统一的中间件和组件管理
 ```python
-app.add_component(DatabaseComponent())
-app.add_component(CacheComponent())
-app.add_component(TaskComponent())
+class MyApp(FoundationApp):
+    middlewares = [RequestLoggingMiddleware, CORSMiddleware]
+    components = [DatabaseComponent, CacheComponent, TaskComponent]
 ```
 
 ### 企业级 DI 容器
@@ -131,24 +132,25 @@ async def create_order(session: AsyncSession, request: OrderRequest):
 
 ### 30 分钟完整应用
 1. [项目结构](./04-project-structure.md)
-2. [HTTP 接口](./08-http-advanced.md)
-3. [数据库](./11-database-complete.md)
+2. [HTTP 接口](./09-http-advanced.md)
+3. [数据库](./12-database-complete.md)
 
 ### 深入理解框架
 1. [Framework 架构](./01-intro-detailed.md)
 2. [DI 容器](./06-di-container-complete.md)
-3. [组件系统](./07-components-detailed.md)
+3. [中间件系统](./07-middleware-guide.md)
+4. [组件系统](./08-components-detailed.md)
 
 ## 🔍 快速查找
 
 | 需求 | 文档 |
 |------|------|
 | 如何启动应用？ | [服务器运行](./03-server-deployment.md) |
-| 如何定义 API？ | [HTTP 接口](./08-http-advanced.md) |
-| 如何操作数据库？ | [数据库](./11-database-complete.md) |
-| 如何处理错误？ | [错误处理](./09-error-handling-guide.md) |
+| 如何定义 API？ | [HTTP 接口](./09-http-advanced.md) |
+| 如何操作数据库？ | [数据库](./12-database-complete.md) |
+| 如何处理错误？ | [错误处理](./10-error-handling-guide.md) |
 | 如何组织项目？ | [项目结构](./04-project-structure.md) |
-| 如何优化性能？ | [最佳实践](./22-best-practices.md) |
+| 如何优化性能？ | [最佳实践](./23-best-practices.md) |
 
 ## 💡 常见问题
 
@@ -156,7 +158,7 @@ async def create_order(session: AsyncSession, request: OrderRequest):
 A: 从 [快速开始](./00-quick-start.md) 开始，这是所有功能的速查手册。
 
 ### Q: 如何连接数据库？
-A: 查看 [项目结构](./04-project-structure.md) 和 [数据库](./11-database-complete.md)。
+A: 查看 [项目结构](./04-project-structure.md) 和 [数据库](./12-database-complete.md)。
 
 ### Q: 如何部署到生产环境？
 A: 查看 [服务器运行](./03-server-deployment.md) 中的生产模式配置。
@@ -174,7 +176,7 @@ A: 查看 [服务器运行](./03-server-deployment.md) 中的生产模式配置�
 1. **[安装](./02-installation-guide.md)** - 按照步骤安装依赖
 2. **[快速开始](./00-quick-start.md)** - 5 分钟了解所有功能
 3. **[项目结构](./04-project-structure.md)** - 建立项目骨架
-4. **[构建应用](./08-http-advanced.md)** - 开始编写代码
+4. **[构建应用](./09-http-advanced.md)** - 开始编写代码
 
 ## 📞 支持
 

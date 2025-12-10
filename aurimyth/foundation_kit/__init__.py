@@ -16,8 +16,14 @@
 # 基础设施层
 # 应用层（包含 interfaces）
 # 工具包
-# 测试框架
-from . import application, common, domain, infrastructure, testing, toolkit
+from . import application, common, domain, infrastructure, toolkit
+
+# 测试框架（延迟导入，仅在开发环境可用）
+try:
+    from . import testing
+except ImportError:
+    # 生产环境可能没有安装 pytest，跳过 testing 模块
+    testing = None
 
 # 版本号由 hatch-vcs 自动生成
 try:
@@ -31,6 +37,9 @@ __all__ = [
     "common",
     "domain",
     "infrastructure",
-    "testing",
     "toolkit",
 ]
+
+# 如果 testing 模块可用，添加到 __all__
+if testing is not None:
+    __all__.append("testing")

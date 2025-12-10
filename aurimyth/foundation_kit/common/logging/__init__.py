@@ -30,18 +30,27 @@ _trace_id: str | None = None
 
 
 def get_trace_id() -> str:
-    """获取当前链路追踪ID。"""
+    """获取当前链路追踪ID。
+
+    如果尚未设置，则生成一个新的随机 ID，并同步到日志额外字段中，
+    确保所有日志记录都包含 ``trace_id``，避免格式化错误。
+    """
     global _trace_id
     if _trace_id is None:
         _trace_id = str(uuid.uuid4())
+        # 确保 Loguru 记录中总是存在 ``extra["trace_id"]`` 键
+        logger.configure(extra={"trace_id": _trace_id})
     return _trace_id
 
 
 def set_trace_id(trace_id: str) -> None:
-    """设置链路追踪ID。"""
+    """设置链路追踪ID。
+
+    会同时更新全局变量和 Loguru 的 ``extra["trace_id"]`` 默认值。
+    """
     global _trace_id
     _trace_id = trace_id
-    logger.bind(trace_id=trace_id)
+    logger.configure(extra={"trace_id": trace_id})
 
 
 def setup_logging(
@@ -71,7 +80,7 @@ def setup_logging(
         enable_error_file: 是否单独记录错误日志
     """
     log_level = log_level.upper()
-    log_dir = log_dir or "log"
+    log_dir = log_dir or "logs"
     
     # 创建日志目录
     os.makedirs(log_dir, exist_ok=True)
@@ -92,6 +101,10 @@ def setup_logging(
         "{extra[trace_id]} - "
         "{message}"
     )
+
+    # 确保在添加任何 handler 之前已经有一个默认的 trace_id，
+    # 防止在第一次日志输出时因为缺少 extra["trace_id"] 而抛出 KeyError。
+    get_trace_id()
     
     # 控制台输出
     if enable_console:

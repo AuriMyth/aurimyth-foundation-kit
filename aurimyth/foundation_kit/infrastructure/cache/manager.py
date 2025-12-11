@@ -65,10 +65,9 @@ class CacheManager:
         Args:
             config: 配置字典
                 - CACHE_TYPE: 缓存类型（redis/memory/memcached）
-                - CACHE_REDIS_URL: Redis连接URL
+                - CACHE_URL: 缓存服务 URL（通用）
                 - CACHE_MAX_SIZE: 内存缓存最大容量
                 - CACHE_SERIALIZER: 序列化方式（json/pickle）
-                - CACHE_MEMCACHED_SERVERS: Memcached服务器列表
         """
         self._config = config.copy()
         cache_type = config.get("CACHE_TYPE", "redis")
@@ -88,18 +87,14 @@ class CacheManager:
         # 配置构建函数字典（函数式编程）
         config_builders: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
             "redis": lambda cfg: {
-                "url": (
-                    cfg.get("CACHE_REDIS_URL") or
-                    cfg.get("CACHE_URL") or
-                    None  # TODO: 从应用配置中获取
-                ),
+                "url": cfg.get("CACHE_URL"),
                 "serializer": cfg.get("CACHE_SERIALIZER", "json"),
             },
             "memory": lambda cfg: {
                 "max_size": cfg.get("CACHE_MAX_SIZE", 1000),
             },
             "memcached": lambda cfg: {
-                "servers": cfg.get("CACHE_MEMCACHED_SERVERS"),
+                "servers": cfg.get("CACHE_URL"),  # memcached 也用 URL
             },
         }
         
@@ -114,9 +109,9 @@ class CacheManager:
         
         # 验证必需配置
         if cache_type == "redis" and not backend_config.get("url"):
-            raise ValueError("Redis URL未配置，请设置 CACHE_REDIS_URL")
+            raise ValueError("缓存 URL 未配置，请设置 CACHE_URL")
         if cache_type == "memcached" and not backend_config.get("servers"):
-            raise ValueError("Memcached服务器列表未配置，请设置 CACHE_MEMCACHED_SERVERS")
+            raise ValueError("缓存 URL 未配置，请设置 CACHE_URL")
         
         return backend_config
     

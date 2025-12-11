@@ -205,7 +205,7 @@ class MigrationManager:
     使用示例:
         manager = MigrationManager(
             config_path="alembic.ini",
-            script_location="alembic",
+            script_location="migrations",
             database_url="sqlite+aiosqlite:///./app.db",
             model_modules=["app.models"],
             auto_create=True,
@@ -225,7 +225,7 @@ class MigrationManager:
         self,
         database_url: str,
         config_path: str = "alembic.ini",
-        script_location: str = "alembic",
+        script_location: str = "migrations",
         model_modules: list[str] | None = None,
         auto_create: bool = True,
     ) -> None:
@@ -267,229 +267,21 @@ class MigrationManager:
         logger.debug(f"迁移管理器已初始化: {config_path}")
     
     def _ensure_migration_setup(self) -> None:
-        """确保迁移配置和目录存在，不存在则自动创建。"""
-        script_dir = Path(self._script_location)
+        """确保迁移配置和目录存在，不存在则自动创建。
         
-        # 创建迁移脚本目录
-        if not script_dir.exists():
-            logger.info(f"创建迁移脚本目录: {script_dir}")
-            script_dir.mkdir(parents=True, exist_ok=True)
-            
-            # 创建 versions 目录
-            versions_dir = script_dir / "versions"
-            versions_dir.mkdir(exist_ok=True)
-            
-            # 创建 env.py
-            env_py = script_dir / "env.py"
-            if not env_py.exists():
-                env_content = self._get_env_py_template()
-                env_py.write_text(env_content, encoding="utf-8")
-                logger.debug(f"创建 env.py: {env_py}")
-            
-            # 创建 script.py.mako
-            mako_file = script_dir / "script.py.mako"
-            if not mako_file.exists():
-                mako_content = self._get_script_mako_template()
-                mako_file.write_text(mako_content, encoding="utf-8")
-                logger.debug(f"创建 script.py.mako: {mako_file}")
+        使用统一的 setup 模块，保证单一数据源。
+        """
+        from .setup import ensure_migration_setup
         
-        # 创建 alembic.ini
-        if not self._config_path.exists():
-            logger.info(f"创建 Alembic 配置文件: {self._config_path}")
-            ini_content = self._get_alembic_ini_template()
-            self._config_path.write_text(ini_content, encoding="utf-8")
-    
-    def _get_alembic_ini_template(self) -> str:
-        """获取 alembic.ini 模板。"""
-        return f"""# Alembic 配置文件
-# 由 AuriMyth Foundation Kit 自动生成
-
-[alembic]
-# 迁移脚本目录
-script_location = {self._script_location}
-
-# 模板文件
-file_template = %%(year)d%%(month).2d%%(day).2d_%%(hour).2d%%(minute).2d_%%(rev)s_%%(slug)s
-
-# 时区
-timezone = UTC
-
-# 是否截断长标识符
-truncate_slug_length = 40
-
-# 版本路径分隔符
-version_path_separator = os
-
-# 数据库连接字符串（运行时动态设置）
-sqlalchemy.url = {self._database_url}
-
-[post_write_hooks]
-# 格式化工具钩子（可选）
-# hooks = black
-# black.type = console_scripts
-# black.entrypoint = black
-
-[loggers]
-keys = root,sqlalchemy,alembic
-
-[handlers]
-keys = console
-
-[formatters]
-keys = generic
-
-[logger_root]
-level = WARN
-handlers = console
-qualname =
-
-[logger_sqlalchemy]
-level = WARN
-handlers =
-qualname = sqlalchemy.engine
-
-[logger_alembic]
-level = INFO
-handlers =
-qualname = alembic
-
-[handler_console]
-class = StreamHandler
-args = (sys.stderr,)
-level = NOTSET
-formatter = generic
-
-[formatter_generic]
-format = %(levelname)-5.5s [%(name)s] %(message)s
-datefmt = %H:%M:%S
-"""
-    
-    def _get_env_py_template(self) -> str:
-        """获取 env.py 模板。"""
-        # 生成模型模块列表的 Python 代码
-        model_modules_str = repr(self._model_modules)
+        # 获取当前工作目录作为 base_path
+        base_path = Path.cwd()
         
-        load_models_code = f"""# 【重要】加载所有模型，确保 Alembic 可以检测到它们
-#
-# 动态加载配置的模型模块
-# 配置列表: {model_modules_str}
-#
-import sys
-from pathlib import Path
-
-# 确保项目根目录在 sys.path 中，以便能导入项目模块
-# 假设 env.py 位于 <project_root>/alembic/env.py
-# resolve() 会解析符号链接，parents[1] 是项目根目录
-project_root = Path(__file__).resolve().parents[1]
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-
-from aurimyth.foundation_kit.application.migrations import load_all_models
-
-# 加载模型
-load_all_models({model_modules_str})
-"""
-        
-        return f'''"""Alembic 环境配置。
-
-由 AuriMyth Foundation Kit 自动生成。
-"""
-
-from logging.config import fileConfig
-
-from alembic import context
-from sqlalchemy import engine_from_config, pool
-
-# 导入模型基类
-from aurimyth.foundation_kit.domain.models import Base
-
-# Alembic Config 对象
-config = context.config
-
-# 解析日志配置
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
-
-{load_models_code}
-
-# 目标元数据
-target_metadata = Base.metadata
-
-
-def run_migrations_offline() -> None:
-    """离线模式运行迁移。
-    
-    在离线模式下，不需要实际的数据库连接，
-    仅生成 SQL 脚本。
-    """
-    url = config.get_main_option("sqlalchemy.url")
-    context.configure(
-        url=url,
-        target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={{"paramstyle": "named"}},
-    )
-
-    with context.begin_transaction():
-        context.run_migrations()
-
-
-def run_migrations_online() -> None:
-    """在线模式运行迁移。
-    
-    在在线模式下，需要实际的数据库连接。
-    """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {{}}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
+        ensure_migration_setup(
+            base_path=base_path,
+            config_path=str(self._config_path),
+            script_location=self._script_location,
+            model_modules=self._model_modules,
         )
-
-        with context.begin_transaction():
-            context.run_migrations()
-
-
-if context.is_offline_mode():
-    run_migrations_offline()
-else:
-    run_migrations_online()
-'''
-    
-    def _get_script_mako_template(self) -> str:
-        """获取 script.py.mako 模板。"""
-        return '''"""${message}
-
-Revision ID: ${up_revision}
-Revises: ${down_revision | comma,n}
-Create Date: ${create_date}
-
-"""
-from alembic import op
-import sqlalchemy as sa
-${imports if imports else ""}
-
-# revision identifiers, used by Alembic.
-revision = ${repr(up_revision)}
-down_revision = ${repr(down_revision)}
-branch_labels = ${repr(branch_labels)}
-depends_on = ${repr(depends_on)}
-
-
-def upgrade() -> None:
-    """升级迁移。"""
-    ${upgrades if upgrades else "pass"}
-
-
-def downgrade() -> None:
-    """回滚迁移。"""
-    ${downgrades if downgrades else "pass"}
-'''
     
     def register_before_upgrade(self, hook: Callable[[str], None]) -> None:
         """注册升级前钩子。
@@ -548,7 +340,7 @@ def downgrade() -> None:
         
         return models
     
-    def _detect_changes(self) -> list[dict[str, Any]]:
+    async def _detect_changes(self) -> list[dict[str, Any]]:
         """检测模型变更（类似 Django 的 autodetect）。
         
         Returns:
@@ -562,24 +354,25 @@ def downgrade() -> None:
             if not models:
                 return []
             
-            # 使用传入的数据库 URL
-            engine = create_engine(self._database_url)
-            with engine.connect() as conn:
+            # 使用异步引擎
+            engine = create_async_engine(self._database_url)
+            
+            def _sync_detect(conn):
                 context = MigrationContext.configure(conn)
-                metadata = MetaData()
-                metadata.reflect(bind=engine)
-                
-                # 比较元数据
                 diff = compare_metadata(context, Base.metadata)
-                
                 changes = []
                 for change in diff:
                     changes.append({
                         "type": type(change).__name__,
                         "description": str(change),
                     })
-                
                 return changes
+            
+            async with engine.connect() as conn:
+                changes = await conn.run_sync(_sync_detect)
+            
+            await engine.dispose()
+            return changes
         except Exception as e:
             logger.warning(f"检测模型变更失败: {e}")
             return []
@@ -645,7 +438,7 @@ def downgrade() -> None:
         # 检测变更
         changes = []
         if autogenerate and self._model_modules:
-            changes = self._detect_changes()
+            changes = await self._detect_changes()
             if changes:
                 logger.info(f"检测到 {len(changes)} 个模型变更")
                 for change in changes:
@@ -784,38 +577,36 @@ def downgrade() -> None:
         
         applied = []
         pending = []
-        unapplied = []
         
-        # 构建依赖图
-        revision_map = {rev.revision: rev for rev in revisions}
-        visited = set()
+        # 简化逻辑：
+        # - 如果 current_rev 是 None，所有迁移都是 pending
+        # - 如果 current_rev == head_rev，没有 pending
+        # - 否则，从 head 到 current 之间的是 pending
         
-        def traverse(rev_id: str | None):
-            if not rev_id or rev_id in visited:
-                return
-            visited.add(rev_id)
-            if rev_id in revision_map:
-                rev = revision_map[rev_id]
-                if rev_id == current_rev:
+        if current_rev is None:
+            # 数据库是新的，所有迁移都需要执行
+            pending = [rev.revision for rev in revisions]
+        elif current_rev == head_rev:
+            # 已是最新版本
+            applied = [rev.revision for rev in revisions]
+        else:
+            # 部分已执行，部分待执行
+            # 从 head 向下遍历，直到 current_rev
+            found_current = False
+            for rev in revisions:  # walk_revisions 从 head 开始
+                if rev.revision == current_rev:
+                    found_current = True
                     applied.append(rev.revision)
-                elif current_rev:
-                    # 检查是否在当前版本之后
-                    if rev_id not in [r.revision for r in applied]:
-                        pending.append(rev.revision)
+                elif found_current:
+                    applied.append(rev.revision)
                 else:
-                    unapplied.append(rev.revision)
-                traverse(rev.down_revision)
-        
-        # 从 head 开始遍历
-        if head_rev:
-            traverse(head_rev)
+                    pending.append(rev.revision)
         
         return {
             "current": current_rev,
             "head": head_rev,
-            "pending": [r for r in pending if r not in applied],
-            "applied": list(applied),
-            "unapplied": [r for r in unapplied if r not in applied],
+            "pending": pending,
+            "applied": applied,
         }
     
     async def show(self) -> list[dict[str, str]]:

@@ -19,7 +19,6 @@ from .consumer import EventConsumer
 from .middleware import EventLoggingMiddleware, EventMiddleware
 from .models import Event, EventHandler, EventType
 
-
 __all__ = [
     "Event",
     "EventBus",

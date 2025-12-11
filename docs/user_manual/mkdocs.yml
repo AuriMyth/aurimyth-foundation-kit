@@ -101,6 +101,9 @@ nav:
     - 数据库迁移: 21-migration-guide.md
     - 日志系统: 22-logging-complete.md
   - 最佳实践: 23-best-practices.md
+  - CLI 工具:
+    - 命令参考: 24-cli-commands.md
+    - 脚手架指南: 25-scaffold-guide.md
 
 extra:
   social:

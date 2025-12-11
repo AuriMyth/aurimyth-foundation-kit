@@ -9,27 +9,51 @@
 - application: 应用层（配置管理、RPC通信、依赖注入、事务管理、事件系统、迁移管理、API接口）
 - toolkit: 工具包（通用工具函数）
 - testing: 测试框架（测试基类、测试客户端、数据工厂）
+
+使用方式：
+    from aurimyth.foundation_kit import application
+    from aurimyth.foundation_kit.domain.models import Model
 """
 
-# Common 层（最基础层）
-# 领域层
-# 基础设施层
-# 应用层（包含 interfaces）
-# 工具包
-from . import application, common, domain, infrastructure, toolkit
+from __future__ import annotations
 
-# 测试框架（延迟导入，仅在开发环境可用）
-try:
-    from . import testing
-except ImportError:
-    # 生产环境可能没有安装 pytest，跳过 testing 模块
-    testing = None
+import importlib
+from typing import TYPE_CHECKING
 
 # 版本号由 hatch-vcs 自动生成
 try:
     from ._version import __version__
 except ImportError:
     __version__ = "0.0.0.dev0"
+
+# 延迟导入：子模块仅在被访问时才加载
+_SUBMODULES = {
+    "application",
+    "common",
+    "domain",
+    "infrastructure",
+    "toolkit",
+    "testing",
+}
+
+
+def __getattr__(name: str):
+    """延迟导入子模块。"""
+    if name in _SUBMODULES:
+        try:
+            return importlib.import_module(f".{name}", __name__)
+        except ImportError:
+            if name == "testing":
+                # testing 模块可能在生产环境不可用
+                return None
+            raise
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    """返回可用属性列表。"""
+    return list(_SUBMODULES) + ["__version__"]
+
 
 __all__ = [
     "__version__",
@@ -38,8 +62,5 @@ __all__ = [
     "domain",
     "infrastructure",
     "toolkit",
+    "testing",
 ]
-
-# 如果 testing 模块可用，添加到 __all__
-if testing is not None:
-    __all__.append("testing")

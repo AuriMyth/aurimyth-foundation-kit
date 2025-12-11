@@ -25,45 +25,59 @@ class BaseError(FoundationError):
     所有应用层的异常应继承此类。
     用于 HTTP API 响应，包含错误代码和状态码。
     
-    继承自 FoundationError 以保持异常体系的一致性。
+    继承示例：
+        class OrderError(BaseError):
+            default_message = "订单错误"
+            default_code = "5001"  # 自定义错误码
+            default_status_code = 400
+        
+        class OrderNotPaidError(OrderError):
+            default_message = "订单未支付"
+            default_code = "5002"
     
     Attributes:
         message: 错误消息
-        code: 错误代码
+        code: 错误代码（字符串或 ErrorCode 枚举）
         status_code: HTTP状态码
         details: 错误详情列表
         metadata: 元数据
     """
     
+    # 类级别默认值，子类可覆盖
+    default_message: str = "未知错误"
+    default_code: str | ErrorCode = ErrorCode.UNKNOWN_ERROR
+    default_status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
+    
     def __init__(
         self,
-        message: str,
-        code: ErrorCode = ErrorCode.UNKNOWN_ERROR,
-        status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
+        message: str | None = None,
+        code: str | ErrorCode | None = None,
+        status_code: int | None = None,
         details: list[ErrorDetail] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         """初始化异常。
         
         Args:
-            message: 错误消息
-            code: 错误代码
-            status_code: HTTP状态码
+            message: 错误消息（默认使用类的 default_message）
+            code: 错误代码（默认使用类的 default_code）
+            status_code: HTTP状态码（默认使用类的 default_status_code）
             details: 错误详情
             metadata: 元数据
         """
-        super().__init__(message)
-        self.message = message
-        self.code = code
-        self.status_code = status_code
+        self.message = message or self.default_message
+        self.code = code or self.default_code
+        self.status_code = status_code or self.default_status_code
         self.details = details or []
         self.metadata = metadata or {}
+        super().__init__(self.message)
     
     def to_dict(self) -> dict[str, Any]:
         """转换为字典。"""
+        code_value = self.code.value if isinstance(self.code, ErrorCode) else self.code
         return {
             "message": self.message,
-            "code": self.code.value,
+            "code": code_value,
             "status_code": self.status_code,
             "details": [detail.model_dump() for detail in self.details],
             "metadata": self.metadata,
@@ -71,69 +85,56 @@ class BaseError(FoundationError):
     
     def __repr__(self) -> str:
         """字符串表示。"""
-        return f"<{self.__class__.__name__} code={self.code.value} message={self.message}>"
+        code_value = self.code.value if isinstance(self.code, ErrorCode) else self.code
+        return f"<{self.__class__.__name__} code={code_value} message={self.message}>"
 
 
 class ValidationError(BaseError):
     """验证异常。"""
     
-    def __init__(
-        self,
-        message: str = "数据验证失败",
-        details: list[ErrorDetail] | None = None,
-        **kwargs
-    ) -> None:
-        super().__init__(
-            message=message,
-            code=ErrorCode.VALIDATION_ERROR,
-            status_code=status.HTTP_400_BAD_REQUEST,
-            details=details,
-            **kwargs
-        )
+    default_message = "数据验证失败"
+    default_code = ErrorCode.VALIDATION_ERROR
+    default_status_code = status.HTTP_400_BAD_REQUEST
 
 
 class NotFoundError(BaseError):
     """资源不存在异常。"""
     
+    default_message = "资源不存在"
+    default_code = ErrorCode.NOT_FOUND
+    default_status_code = status.HTTP_404_NOT_FOUND
+    
     def __init__(
         self,
-        message: str = "资源不存在",
+        message: str | None = None,
         resource: Any = None,
         **kwargs
     ) -> None:
-        metadata = kwargs.pop("metadata", {})
         if resource:
-            metadata["resource"] = str(resource)  # 自动转换为字符串，支持 GUID、UUID 等
-        
-        super().__init__(
-            message=message,
-            code=ErrorCode.NOT_FOUND,
-            status_code=status.HTTP_404_NOT_FOUND,
-            metadata=metadata,
-            **kwargs
-        )
+            metadata = kwargs.get("metadata", {})
+            metadata["resource"] = str(resource)
+            kwargs["metadata"] = metadata
+        super().__init__(message=message, **kwargs)
 
 
 class AlreadyExistsError(BaseError):
     """资源已存在异常。"""
     
+    default_message = "资源已存在"
+    default_code = ErrorCode.ALREADY_EXISTS
+    default_status_code = status.HTTP_409_CONFLICT
+    
     def __init__(
         self,
-        message: str = "资源已存在",
+        message: str | None = None,
         resource: Any = None,
         **kwargs
     ) -> None:
-        metadata = kwargs.pop("metadata", {})
         if resource:
-            metadata["resource"] = str(resource)  # 自动转换为字符串，支持 GUID、UUID 等
-        
-        super().__init__(
-            message=message,
-            code=ErrorCode.ALREADY_EXISTS,
-            status_code=status.HTTP_409_CONFLICT,
-            metadata=metadata,
-            **kwargs
-        )
+            metadata = kwargs.get("metadata", {})
+            metadata["resource"] = str(resource)
+            kwargs["metadata"] = metadata
+        super().__init__(message=message, **kwargs)
 
 
 class VersionConflictError(BaseError):
@@ -194,65 +195,33 @@ class VersionConflictError(BaseError):
 class UnauthorizedError(BaseError):
     """未授权异常。"""
     
-    def __init__(
-        self,
-        message: str = "未授权访问",
-        **kwargs
-    ) -> None:
-        super().__init__(
-            message=message,
-            code=ErrorCode.UNAUTHORIZED,
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            **kwargs
-        )
+    default_message = "未授权访问"
+    default_code = ErrorCode.UNAUTHORIZED
+    default_status_code = status.HTTP_401_UNAUTHORIZED
 
 
 class ForbiddenError(BaseError):
     """禁止访问异常。"""
     
-    def __init__(
-        self,
-        message: str = "禁止访问",
-        **kwargs
-    ) -> None:
-        super().__init__(
-            message=message,
-            code=ErrorCode.FORBIDDEN,
-            status_code=status.HTTP_403_FORBIDDEN,
-            **kwargs
-        )
+    default_message = "禁止访问"
+    default_code = ErrorCode.FORBIDDEN
+    default_status_code = status.HTTP_403_FORBIDDEN
 
 
 class DatabaseError(BaseError):
     """数据库异常。"""
     
-    def __init__(
-        self,
-        message: str = "数据库错误",
-        **kwargs
-    ) -> None:
-        super().__init__(
-            message=message,
-            code=ErrorCode.DATABASE_ERROR,
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            **kwargs
-        )
+    default_message = "数据库错误"
+    default_code = ErrorCode.DATABASE_ERROR
+    default_status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
 class BusinessError(BaseError):
     """业务逻辑异常。"""
     
-    def __init__(
-        self,
-        message: str,
-        **kwargs
-    ) -> None:
-        super().__init__(
-            message=message,
-            code=ErrorCode.BUSINESS_ERROR,
-            status_code=status.HTTP_400_BAD_REQUEST,
-            **kwargs
-        )
+    default_message = "业务错误"
+    default_code = ErrorCode.BUSINESS_ERROR
+    default_status_code = status.HTTP_400_BAD_REQUEST
 
 
 __all__ = [

@@ -9,11 +9,11 @@
 ### 安装
 
 ```bash
-# 使用 uv（推荐）
-uv add aurimyth-foundation-kit
+# 推荐（PostgreSQL + Redis + 任务队列 + 调度器）
+uv add "aurimyth-foundation-kit[recommended]"
 
-# 或使用 pip
-pip install aurimyth-foundation-kit
+# 或按需组合
+uv add "aurimyth-foundation-kit[postgres,redis]"
 ```
 
 ### Hello World

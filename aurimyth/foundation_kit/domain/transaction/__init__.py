@@ -9,6 +9,9 @@
 
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
+
+# 用于跟踪嵌套事务的上下文变量
+import contextvars
 from functools import wraps
 from inspect import signature
 
@@ -16,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aurimyth.foundation_kit.common.logging import logger
 from aurimyth.foundation_kit.domain.exceptions import TransactionRequiredError
+
+_transaction_depth: contextvars.ContextVar[int] = contextvars.ContextVar("transaction_depth", default=0)
 
 
 @asynccontextmanager
@@ -27,29 +32,35 @@ async def transactional_context(session: AsyncSession, auto_commit: bool = True)
         session: 数据库会话
         auto_commit: 是否自动提交（默认True）
     
+    特性:
+        - 支持嵌套调用：只有最外层会 commit/rollback
+        - 兼容 SQLAlchemy 2.0 autobegin 模式
+    
     用法:
         async with transactional_context(session):
-            # 在这里执行多个数据库操作
             await repo1.create(...)
             await repo2.update(...)
-            # 如果没有异常，自动提交
-            # 如果有异常，自动回滚
+            # 成功自动提交，异常自动回滚
     """
-    # 检查是否已在事务中（支持嵌套）
-    already_in_transaction = session.in_transaction()
+    # 使用 contextvars 跟踪嵌套深度，避免依赖 in_transaction()
+    depth = _transaction_depth.get()
+    is_outermost = depth == 0
+    _transaction_depth.set(depth + 1)
     
     try:
         yield session
-        # 只有在非嵌套且auto_commit=True时才提交
-        if auto_commit and not already_in_transaction:
+        # 只有最外层且 auto_commit=True 时才提交
+        if auto_commit and is_outermost:
             await session.commit()
             logger.debug("事务提交成功")
     except Exception as exc:
-        # 发生异常时回滚
-        if not already_in_transaction:
+        # 只有最外层才回滚
+        if is_outermost:
             await session.rollback()
             logger.error(f"事务回滚: {exc}")
         raise
+    finally:
+        _transaction_depth.set(depth)
 
 
 def transactional[T](func: Callable[..., T]) -> Callable[..., T]:
@@ -125,13 +136,8 @@ def transactional[T](func: Callable[..., T]) -> Callable[..., T]:
                 "或者类有 'session' 属性。"
             )
 
-        # 检查是否已经在事务中
-        if session.in_transaction():
-            logger.debug(f"已在事务中，直接执行 {func.__name__}")
-            return await func(*args, **kwargs)
-
-        # 否则开启新事务
-        logger.debug(f"开启新事务执行 {func.__name__}")
+        # 使用事务上下文管理器，它会自动处理嵌套情况
+        logger.debug(f"执行事务 {func.__name__}")
         async with transactional_context(session):
             return await func(*args, **kwargs)
 
@@ -226,11 +232,11 @@ def requires_transaction(func: Callable) -> Callable:
 
 
 __all__ = [
+    "TransactionManager",
+    "TransactionRequiredError",
     "ensure_transaction",
     "requires_transaction",
     "transactional",
     "transactional_context",
-    "TransactionManager",
-    "TransactionRequiredError",
 ]
 

@@ -7,27 +7,29 @@
 > 📖 **详细文档**：本目录下还有更详细的技术指南
 
 1. [简介](#1-简介) - 查看详细版：[01-intro-detailed.md](./01-intro-detailed.md)
-2. [快速上手](#2-快速上手) - 查看详细版：[02-installation-guide.md](./02-installation-guide.md)
-3. [服务器运行](#3-服务器运行) - 查看详细版：[03-server-deployment.md](./03-server-deployment.md)
-4. [项目结构](#4-项目结构) - 查看详细版：[04-project-structure.md](./04-project-structure.md)
-5. [配置](#5-配置) - 查看详细版：[05-configuration-advanced.md](./05-configuration-advanced.md)
-6. [依赖注入](#6-依赖注入) - 查看详细版：[06-di-container-complete.md](./06-di-container-complete.md)
-7. [中间件和组件](#7-中间件和组件) - 查看详细版：[07-middleware-guide.md](./07-middleware-guide.md) / [08-components-detailed.md](./08-components-detailed.md)
-8. [HTTP 接口](#8-http-接口) - 查看详细版：[09-http-advanced.md](./09-http-advanced.md) （Ingress/Egress 详解）
-9. [错误处理](#9-错误处理) - 查看详细版：[10-error-handling-guide.md](./10-error-handling-guide.md)
-10. [事务管理](#10-事务管理) - 查看详细版：[11-transaction-management.md](./11-transaction-management.md)
-11. [数据库](#11-数据库) - 查看详细版：[12-database-complete.md](./12-database-complete.md)
-12. [缓存](#12-缓存) - 查看详细版：[13-caching-advanced.md](./13-caching-advanced.md)
-13. [异步任务](#13-异步任务) - 查看详细版：[14-async-tasks-guide.md](./14-async-tasks-guide.md)
-14. [事件驱动](#14-事件驱动) - 查看详细版：[15-events-driven.md](./15-events-driven.md)
-15. [定时调度](#15-定时调度) - 查看详细版：[16-scheduler-guide.md](./16-scheduler-guide.md)
-16. [RPC 与服务发现](#16-rpc-与服务发现) - 查看详细版：[17-rpc-microservices.md](./17-rpc-microservices.md)
-17. [WebSocket](#17-websocket) - 查看详细版：[18-websocket-guide.md](./18-websocket-guide.md)
-18. [对象存储](#18-对象存储) - 查看详细版：[19-storage-guide.md](./19-storage-guide.md)
-19. [国际化](#19-国际化) - 查看详细版：[20-i18n-guide.md](./20-i18n-guide.md)
-20. [数据库迁移](#20-数据库迁移) - 查看详细版：[21-migration-guide.md](./21-migration-guide.md)
-21. [日志系统](#21-日志系统) - 查看详细版：[22-logging-complete.md](./22-logging-complete.md)
-22. [最佳实践](#22-最佳实践) - 查看详细版：[23-best-practices.md](./23-best-practices.md)
+2. [快速上手（脚手架）](#2-快速上手脚手架) - 查看详细版：[25-scaffold-guide.md](./25-scaffold-guide.md)
+3. [快速上手（手动）](#3-快速上手手动) - 查看详细版：[02-installation-guide.md](./02-installation-guide.md)
+4. [服务器运行](#4-服务器运行) - 查看详细版：[03-server-deployment.md](./03-server-deployment.md)
+5. [项目结构](#5-项目结构) - 查看详细版：[04-project-structure.md](./04-project-structure.md)
+6. [配置](#6-配置) - 查看详细版：[05-configuration-advanced.md](./05-configuration-advanced.md)
+7. [依赖注入](#7-依赖注入) - 查看详细版：[06-di-container-complete.md](./06-di-container-complete.md)
+8. [中间件和组件](#8-中间件和组件) - 查看详细版：[07-middleware-guide.md](./07-middleware-guide.md) / [08-components-detailed.md](./08-components-detailed.md)
+9. [HTTP 接口](#9-http-接口) - 查看详细版：[09-http-advanced.md](./09-http-advanced.md) （Ingress/Egress 详解）
+10. [错误处理](#10-错误处理) - 查看详细版：[10-error-handling-guide.md](./10-error-handling-guide.md)
+11. [事务管理](#11-事务管理) - 查看详细版：[11-transaction-management.md](./11-transaction-management.md)
+12. [数据库](#12-数据库) - 查看详细版：[12-database-complete.md](./12-database-complete.md)
+13. [缓存](#13-缓存) - 查看详细版：[13-caching-advanced.md](./13-caching-advanced.md)
+14. [异步任务](#14-异步任务) - 查看详细版：[14-async-tasks-guide.md](./14-async-tasks-guide.md)
+15. [事件驱动](#15-事件驱动) - 查看详细版：[15-events-driven.md](./15-events-driven.md)
+16. [定时调度](#16-定时调度) - 查看详细版：[16-scheduler-guide.md](./16-scheduler-guide.md)
+17. [RPC 与服务发现](#17-rpc-与服务发现) - 查看详细版：[17-rpc-microservices.md](./17-rpc-microservices.md)
+18. [WebSocket](#18-websocket) - 查看详细版：[18-websocket-guide.md](./18-websocket-guide.md)
+19. [对象存储](#19-对象存储) - 查看详细版：[19-storage-guide.md](./19-storage-guide.md)
+20. [国际化](#20-国际化) - 查看详细版：[20-i18n-guide.md](./20-i18n-guide.md)
+21. [数据库迁移](#21-数据库迁移) - 查看详细版：[21-migration-guide.md](./21-migration-guide.md)
+22. [日志系统](#22-日志系统) - 查看详细版：[22-logging-complete.md](./22-logging-complete.md)
+23. [CLI 命令](#23-cli-命令) - 查看详细版：[24-cli-commands.md](./24-cli-commands.md)
+24. [最佳实践](#24-最佳实践) - 查看详细版：[23-best-practices.md](./23-best-practices.md)
 
 ---
 
@@ -41,12 +43,71 @@ AuriMyth Foundation Kit 是 FastAPI 的增强层，提供微服务开发所需�
 
 ---
 
-## 2. 快速上手
+## 2. 快速上手（脚手架）
+
+> 📖 **推荐方式**：使用脚手架快速创建项目，详见 [25-scaffold-guide.md](./25-scaffold-guide.md)
+
+```bash
+# 1. 创建项目目录并初始化
+mkdir my-service && cd my-service
+uv init . --name my_service --no-package --python 3.13
+
+# 2. 安装框架
+uv add "aurimyth-foundation-kit[recommended]"
+
+# 3. 初始化脚手架（推荐交互式模式）
+aurimyth init -i              # 交互式，会询问配置选项
+# 或
+aurimyth init                 # 使用默认配置
+aurimyth init my_package      # 使用顶层包结构
+aurimyth init --docker        # 同时生成 Docker 配置
+
+# 4. 配置环境变量
+cp .env.example .env
+# 编辑 .env 配置数据库连接
+
+# 5. 生成 CRUD 代码
+aurimyth generate crud user email:str:unique age:int? status:str=active
+
+# 6. 生成并执行数据库迁移
+aurimyth migrate make -m "initial"
+aurimyth migrate up
+
+# 7. 启动开发服务器
+aurimyth server dev
+```
+
+> **注意**：`init` 会覆盖 `uv init` 创建的默认 `main.py`，这是正常行为。
+
+访问 http://localhost:8000/docs 查看 API 文档。
+
+### 字段语法说明
+
+```bash
+# 格式: name:type:modifiers
+# 类型: str, text, int, float, decimal, bool, datetime, date, json
+# 修饰符: ? (可空), unique, index, =默认值
+
+# 示例
+aurimyth generate crud article title:str(200) content:text status:str=draft
+aurimyth generate crud product name:str:unique price:decimal stock:int=0
+
+# 交互式模式
+aurimyth generate crud user -i
+```
+
+---
+
+## 3. 快速上手（手动）
 
 ### 安装
 
 ```bash
-uv add aurimyth-foundation-kit
+# 推荐：PostgreSQL + Redis + 任务队列 + 调度器
+uv add "aurimyth-foundation-kit[recommended]"
+
+# 或按需组合
+uv add "aurimyth-foundation-kit[postgres,redis]"
 ```
 
 ### Hello World
@@ -78,37 +139,39 @@ if __name__ == "__main__":
 
 ```bash
 # 开发模式（热重载）
-aurimyth-server dev
+aurimyth server dev
 
 # 生产模式（多进程）
-aurimyth-server prod
+aurimyth server prod
 ```
 
 ---
 
-## 3. 服务器运行
+## 4. 服务器运行
 
 ### CLI 命令（推荐）
 
 ```bash
 # 开发模式（热重载）
-aurimyth-server dev
+aurimyth server dev
 
 # 生产模式（多进程）
-aurimyth-server prod
+aurimyth server prod
 ```
 
 > 📖 **详细配置**：参考 [03-server-deployment.md](./03-server-deployment.md)
 
 ---
 
-## 4. 项目结构
+## 5. 项目结构
 
 ```
 my_service/
 ├── main.py                 # 应用入口
 ├── config.py               # 配置
-├── api/v1/                 # API 路由
+├── alembic.ini             # Alembic 配置
+├── .env.example            # 环境变量模板
+├── api/                    # API 路由
 │   ├── users.py
 │   └── orders.py
 ├── services/               # 业务逻辑
@@ -123,8 +186,12 @@ my_service/
 ├── schemas/                # Pydantic 模型
 │   ├── user.py
 │   └── order.py
-├── alembic/                # 数据库迁移
-├── .env                    # 环境变量
+├── migrations/             # 数据库迁移
+│   ├── env.py
+│   ├── script.py.mako
+│   └── versions/
+├── tests/                  # 测试
+│   └── conftest.py
 ├── pyproject.toml
 └── README.md
 ```
@@ -138,7 +205,7 @@ my_service/
 
 ---
 
-## 5. 配置
+## 6. 配置
 
 ### 环境变量（.env）
 
@@ -177,9 +244,9 @@ class MyConfig(BaseConfig):
 
 ---
 
-## 6. 依赖注入
+## 7. 依赖注入
 
-Kit 提供企业级 **DI 容器**，支持 3 种生命周期：
+Kit 提供企业级 **DI 容器**
 
 | 生命周期 | 说明 | 场景 |
 |---------|------|------|
@@ -206,7 +273,7 @@ service = container.resolve(UserService)
 
 ---
 
-## 7. 中间件和组件
+## 8. 中间件和组件
 
 Kit 将功能单元分为两类：
 - **中间件（Middleware）**：处理 HTTP 请求拦截
@@ -271,7 +338,7 @@ app = MyApp(config=config)
 
 ---
 
-## 8. HTTP 接口
+## 9. HTTP 接口
 
 ### 请求模型（Ingress）
 
@@ -331,7 +398,7 @@ async def create_user(
 
 ---
 
-## 9. 错误处理
+## 10. 错误处理
 
 ### 异常体系与继承规则
 
@@ -398,7 +465,7 @@ class BadError(NotFoundError):
 
 ---
 
-## 10. 事务管理
+## 11. 事务管理
 
 ### 推荐方式：装饰器
 
@@ -418,7 +485,7 @@ async def create_user_with_profile(session: AsyncSession, name: str):
 
 ---
 
-## 11. 数据库
+## 12. 数据库
 
 ### 定义模型
 
@@ -473,7 +540,7 @@ async def get_user(user_id: str, repo=Depends(get_user_repo)):
 
 ---
 
-## 12. 缓存
+## 13. 缓存
 
 ### 基本用法
 
@@ -496,7 +563,7 @@ await cache.delete("user:1")
 
 ---
 
-## 13. 异步任务
+## 14. 异步任务
 
 ### 定义任务
 
@@ -521,7 +588,7 @@ send_email_task.send("test@example.com", "Hello!")
 
 ---
 
-## 14. 事件驱动
+## 15. 事件驱动
 
 ### 定义和订阅
 
@@ -554,7 +621,7 @@ await bus.publish(OrderCreatedEvent(order_id="1001", amount=99.9))
 
 ---
 
-## 15. 定时调度
+## 16. 定时调度
 
 ```python
 from aurimyth.foundation_kit.infrastructure.scheduler.manager import SchedulerManager
@@ -582,7 +649,7 @@ scheduler.add_job(
 
 ---
 
-## 16. RPC 与服务发现
+## 17. RPC 与服务发现
 
 ### 配置
 
@@ -597,7 +664,7 @@ RPC_CLIENT_SERVICES={"order-service": "http://order-service:8000"}
 from aurimyth.foundation_kit.application.rpc.client import create_rpc_client
 
 client = create_rpc_client(service_name="order-service")
-response = await client.get("/api/v1/orders/123")
+response = await client.get("/api/orders/123")
 ```
 
 ### 自动分布式链路追踪
@@ -614,7 +681,7 @@ logger.info(f"处理请求 | Trace-ID: {trace_id}")
 
 ---
 
-## 17. WebSocket
+## 18. WebSocket
 
 ### 基本连接
 
@@ -646,7 +713,7 @@ async def websocket_chat(websocket: WebSocket, room_id: str):
 
 ---
 
-## 18. 对象存储
+## 19. 对象存储
 
 ```python
 from aurimyth.foundation_kit.infrastructure.storage.factory import StorageFactory
@@ -671,7 +738,7 @@ with open("avatar.png", "rb") as f:
 
 ---
 
-## 19. 国际化
+## 20. 国际化
 
 ```python
 from aurimyth.foundation_kit.common.i18n.translator import translate, load_translations
@@ -690,7 +757,7 @@ msg = translate("error.not_found", name="User", locale="zh_CN")
 
 ---
 
-## 20. 数据库迁移
+## 21. 数据库迁移
 
 ### 自动迁移（推荐）
 
@@ -716,20 +783,20 @@ class MyApp(FoundationApp):
 alembic init -t async alembic
 
 # 生成迁移
-aurimyth-migrate make -m "Add users table"
+aurimyth migrate make -m "Add users table"
 
 # 执行迁移
-aurimyth-migrate up
+aurimyth migrate up
 
 # 查看状态
-aurimyth-migrate status
+aurimyth migrate status
 ```
 
 > 📖 **详细说明**：参考 [21-migration-guide.md](./21-migration-guide.md)
 
 ---
 
-## 21. 日志系统
+## 22. 日志系统
 
 ### 环境变量
 
@@ -758,7 +825,42 @@ logger.info(f"处理请求 | Trace-ID: {trace_id}")
 
 ---
 
-## 22. 最佳实践
+## 23. CLI 命令
+
+### 统一入口
+
+安装后可使用 `aurimyth` 统一命令：
+
+```bash
+# 项目初始化（先用 uv 创建项目）
+uv init . --name my_service --no-package --python 3.13
+uv add "aurimyth-foundation-kit[recommended]"
+aurimyth init -i              # 交互式模式（推荐）
+aurimyth init                 # 默认配置
+aurimyth init my_package      # 顶层包结构
+aurimyth init --docker        # 包含 Docker 配置
+
+# 代码生成
+aurimyth generate crud user
+
+# 服务器
+aurimyth server dev
+aurimyth server prod
+
+# 数据库迁移
+aurimyth migrate make -m "add user"
+aurimyth migrate up
+aurimyth migrate status
+
+# Shell 补全
+aurimyth --install-completion
+```
+
+> 📖 **详细说明**：参考 [24-cli-commands.md](./24-cli-commands.md)
+
+---
+
+## 24. 最佳实践
 
 ### 使用 Foundation Kit 预定义模型
 
@@ -853,7 +955,7 @@ class UserRepository(BaseRepository[User]):
 
 ```bash
 uv init my-service
-uv add sqlalchemy asyncpg redis
+uv add "aurimyth-foundation-kit[recommended]"
 uv lock
 ```
 

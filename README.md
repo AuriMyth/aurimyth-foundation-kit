@@ -97,6 +97,36 @@ aurimyth-migrate status
 aurimyth-migrate show
 ```
 
+### 4. 代码生成器
+
+快速生成标准的 CRUD 代码（模型、仓储、服务、API 路由）：
+
+```bash
+# 生成完整 CRUD（Model + Repository + Service + API）
+aum generate crud user
+
+# 单独生成各层代码
+aum generate model user      # SQLAlchemy 模型
+aum generate repo user       # Repository 仓储层
+aum generate service user    # Service 服务层
+aum generate api user        # API 路由
+
+# 交互式生成（推荐）：逐步选择字段、类型、验证规则
+aum generate crud user -i
+aum generate model user -i
+
+# 指定字段（非交互式）
+aum generate model user --fields "name:str,email:str,age:int"
+```
+
+**交互式模式 (`-i`)** 会引导你：
+- 添加字段名称和类型
+- 设置字段约束（唯一、可空、默认值等）
+- 配置关系字段（外键、多对多等）
+- 自动插入 API 路由到 `api/__init__.py`
+
+生成的代码遵循项目架构模式，开箱即用。
+
 ## 使用方式
 
 在AuriMyth工作区内的其他包中，可以直接导入：
@@ -116,25 +146,46 @@ from aurimyth.foundation_kit.application.rpc import RPCClient
 ## 安装
 
 ```bash
-pip install aurimyth-foundation-kit
+# 推荐（PostgreSQL + Redis + 任务队列 + 调度器）
+uv add "aurimyth-foundation-kit[recommended]"
+
+# 或按需组合
+uv add "aurimyth-foundation-kit[postgres,redis]"
+
+# 全部依赖
+uv add "aurimyth-foundation-kit[all]"
 ```
+
+### 可选依赖
+
+| 名称 | 说明 |
+|------|------|
+| `postgres` | PostgreSQL 数据库 |
+| `mysql` | MySQL 数据库 |
+| `sqlite` | SQLite 数据库 |
+| `redis` | Redis 缓存 |
+| `s3` | S3 对象存储 |
+| `tasks` | 任务队列 |
+| `rabbitmq` | RabbitMQ 支持 |
+| `scheduler` | 定时调度 |
+| `recommended` | 推荐组合 |
+| `all` | 全部依赖 |
 
 ## 开发环境设置
 
 ```bash
 # 克隆仓库
-git clone https://github.com/aurimyth/foundation-kit.git
-cd foundation-kit
+git clone https://github.com/AuriMythNeo/aurimyth-foundation-kit.git
+cd aurimyth-foundation-kit
 
 # 安装依赖
-pip install -e ".[dev]"
+uv sync --group dev
 
 # 运行测试
 pytest
 
-# 代码格式化
-black aurimyth/
-pylint aurimyth/
+# 代码检查
+ruff check .
 mypy aurimyth/
 ```
 

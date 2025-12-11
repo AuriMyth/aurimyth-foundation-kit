@@ -103,7 +103,7 @@ class ErrorHandler(ABC):
         )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content=response.model_dump(),
+            content=response.model_dump(mode="json"),
         )
 
 
@@ -126,12 +126,13 @@ class BaseErrorHandler(ErrorHandler):
             errors=errors,
         )
         
+        # metadata 放入 details 字段
         if exception.metadata:
-            response.metadata = exception.metadata
+            response.details = exception.metadata
         
         return JSONResponse(
             status_code=exception.status_code,
-            content=response.model_dump(),
+            content=response.model_dump(mode="json"),
         )
 
 
@@ -153,7 +154,7 @@ class HTTPExceptionHandler(ErrorHandler):
         
         return JSONResponse(
             status_code=exception.status_code,
-            content=response.model_dump(),
+            content=response.model_dump(mode="json"),
         )
 
 
@@ -184,14 +185,14 @@ class ValidationErrorHandler(ErrorHandler):
         
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content=response.model_dump(),
+            content=response.model_dump(mode="json"),
         )
 
 
 class ServiceErrorHandler(ErrorHandler):
     """服务层异常处理器。
     
-    处理 Domain 层的 ServiceException，转换为应用层的 BusinessError。
+    处理 Domain 层的 ServiceException。
     """
     
     def can_handle(self, exception: Exception) -> bool:
@@ -200,32 +201,30 @@ class ServiceErrorHandler(ErrorHandler):
     
     async def handle(self, exception: Exception, request: Request) -> JSONResponse:
         """处理服务层异常。"""
-        if isinstance(exception, ServiceException):
-            # 转换为应用层的 BusinessError
-            business_error = BusinessError(
-                message=exception.message,
-                metadata={
-                    "code": exception.code,
-                    **exception.metadata,
-                } if exception.code or exception.metadata else None,
-            )
-            
-            # 使用 BusinessError 的响应格式
-            response = ResponseBuilder.fail(
-                message=business_error.message,
-                code=int(business_error.code.value),
-            )
-            
-            if business_error.metadata:
-                response.metadata = business_error.metadata
-            
-            return JSONResponse(
-                status_code=business_error.status_code,
-                content=response.model_dump(),
-            )
+        if not isinstance(exception, ServiceException):
+            return await self._default_handle(exception, request)
         
-        # 不应该到达这里
-        return await self._default_handle(exception, request)
+        logger.warning(f"服务层异常: {exception}")
+        
+        # 直接使用 ServiceException 的信息
+        response = ResponseBuilder.fail(
+            message=exception.message,
+            code=400,  # 服务层异常默认 400
+        )
+        
+        # 构建 details
+        details: dict = {}
+        if exception.code:
+            details["code"] = exception.code
+        if exception.metadata:
+            details.update(exception.metadata)
+        if details:
+            response.details = details
+        
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content=response.model_dump(mode="json"),
+        )
 
 
 class DatabaseErrorHandler(ErrorHandler):
@@ -254,7 +253,7 @@ class DatabaseErrorHandler(ErrorHandler):
             )
             return JSONResponse(
                 status_code=app_error.status_code,
-                content=response.model_dump(),
+                content=response.model_dump(mode="json"),
             )
         
         # 处理其他数据库错误
@@ -267,7 +266,7 @@ class DatabaseErrorHandler(ErrorHandler):
         
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content=response.model_dump(),
+            content=response.model_dump(mode="json"),
         )
 
 

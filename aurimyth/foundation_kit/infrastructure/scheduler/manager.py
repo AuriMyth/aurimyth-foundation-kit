@@ -4,14 +4,17 @@
 - 统一的调度器管理
 - 任务注册和启动
 - 生命周期管理
+- 自动设置日志上下文（调度器任务日志自动写入 scheduler_xxx.log）
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
+from functools import wraps
 from typing import TYPE_CHECKING, Any
 
-from aurimyth.foundation_kit.common.logging import logger
+from aurimyth.foundation_kit.common.logging import logger, set_service_context
 
 # 延迟导入 apscheduler（可选依赖）
 try:
@@ -64,28 +67,40 @@ class SchedulerManager:
         
         self._scheduler: AsyncIOScheduler | None = None
         self._initialized: bool = False
+        self._pending_jobs: list[dict[str, Any]] = []  # 待注册的任务（装饰器收集）
+        self._started: bool = False  # 调度器是否已启动
     
     @classmethod
     def get_instance(cls) -> SchedulerManager:
-        """获取单例实例。"""
+        """获取单例实例。
+        
+        首次获取时会同步初始化调度器实例，使装饰器可以在模块导入时使用。
+        """
         if cls._instance is None:
+            if not _APSCHEDULER_AVAILABLE:
+                raise ImportError(
+                    "apscheduler 未安装。请安装可选依赖: pip install 'aurimyth-foundation-kit[scheduler-apscheduler]'"
+                )
             cls._instance = cls()
+            cls._instance._scheduler = AsyncIOScheduler()
+            cls._instance._initialized = True
+            logger.debug("调度器实例已创建")
         return cls._instance
     
     async def initialize(self) -> None:
-        """初始化调度器。"""
-        if not _APSCHEDULER_AVAILABLE:
-            raise ImportError(
-                "apscheduler 未安装。请安装可选依赖: pip install 'aurimyth-foundation-kit[scheduler-apscheduler]'"
-            )
+        """初始化调度器（已废弃，保留以保持后向兼容）。
         
-        if self._initialized:
-            logger.warning("调度器已初始化，跳过")
-            return
-        
-        self._scheduler = AsyncIOScheduler()
-        self._initialized = True
-        logger.info("调度器初始化完成")
+        调度器现在在 get_instance() 时同步初始化。
+        """
+        if not self._initialized:
+            # 如果还未初始化（理论上不会发生），进行初始化
+            if not _APSCHEDULER_AVAILABLE:
+                raise ImportError(
+                    "apscheduler 未安装。请安装可选依赖: pip install 'aurimyth-foundation-kit[scheduler-apscheduler]'"
+                )
+            self._scheduler = AsyncIOScheduler()
+            self._initialized = True
+        logger.debug("调度器已就绪")
     
     @property
     def scheduler(self) -> AsyncIOScheduler:
@@ -156,10 +171,13 @@ class SchedulerManager:
         
         trigger_obj = builder()
         
+        # 包装任务函数，自动设置日志上下文
+        wrapped_func = self._wrap_with_context(func)
+
         # 添加任务
         job_id = id or f"{func.__module__}.{func.__name__}"
         self._scheduler.add_job(
-            func=func,
+            func=wrapped_func,
             trigger=trigger_obj,
             id=job_id,
             **kwargs,
@@ -167,6 +185,23 @@ class SchedulerManager:
         
         logger.info(f"任务已注册: {job_id} | 触发器: {trigger}")
     
+    def _wrap_with_context(self, func: Callable) -> Callable:
+        """包装任务函数，自动设置 scheduler 日志上下文。"""
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            set_service_context("scheduler")
+            return await func(*args, **kwargs)
+
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            set_service_context("scheduler")
+            return func(*args, **kwargs)
+
+        # 根据函数类型选择包装器
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        return sync_wrapper
+
     def remove_job(self, job_id: str) -> None:
         """移除任务。
         
@@ -183,8 +218,127 @@ class SchedulerManager:
             return self._scheduler.get_jobs()
         return []
     
+    def get_job(self, job_id: str) -> Any | None:
+        """获取单个任务。
+        
+        Args:
+            job_id: 任务ID
+            
+        Returns:
+            任务对象，不存在则返回 None
+        """
+        if self._scheduler:
+            return self._scheduler.get_job(job_id)
+        return None
+    
+    def modify_job(
+        self,
+        job_id: str,
+        *,
+        func: Callable | None = None,
+        args: tuple | None = None,
+        kwargs: dict | None = None,
+        name: str | None = None,
+        **changes: Any,
+    ) -> None:
+        """修改任务属性。
+        
+        Args:
+            job_id: 任务ID
+            func: 新的任务函数
+            args: 新的位置参数
+            kwargs: 新的关键字参数
+            name: 新的任务名称
+            **changes: 其他要修改的属性
+        """
+        if not self._scheduler:
+            raise RuntimeError("调度器未初始化")
+        
+        modify_kwargs: dict[str, Any] = {**changes}
+        if func is not None:
+            modify_kwargs["func"] = self._wrap_with_context(func)
+        if args is not None:
+            modify_kwargs["args"] = args
+        if kwargs is not None:
+            modify_kwargs["kwargs"] = kwargs
+        if name is not None:
+            modify_kwargs["name"] = name
+        
+        self._scheduler.modify_job(job_id, **modify_kwargs)
+        logger.info(f"任务已修改: {job_id}")
+    
+    def reschedule_job(
+        self,
+        job_id: str,
+        trigger: str = "interval",
+        *,
+        seconds: int | None = None,
+        minutes: int | None = None,
+        hours: int | None = None,
+        days: int | None = None,
+        cron: str | None = None,
+    ) -> None:
+        """重新调度任务（修改触发器）。
+        
+        Args:
+            job_id: 任务ID
+            trigger: 触发器类型（interval/cron）
+            seconds: 间隔秒数
+            minutes: 间隔分钟数
+            hours: 间隔小时数
+            days: 间隔天数
+            cron: Cron表达式
+        """
+        if not self._scheduler:
+            raise RuntimeError("调度器未初始化")
+        
+        # 构建触发器
+        if trigger == "interval":
+            if seconds:
+                trigger_obj = IntervalTrigger(seconds=seconds)
+            elif minutes:
+                trigger_obj = IntervalTrigger(minutes=minutes)
+            elif hours:
+                trigger_obj = IntervalTrigger(hours=hours)
+            elif days:
+                trigger_obj = IntervalTrigger(days=days)
+            else:
+                raise ValueError("必须指定间隔时间")
+        elif trigger == "cron":
+            if not cron:
+                raise ValueError("Cron触发器必须提供cron表达式")
+            trigger_obj = CronTrigger.from_crontab(cron)
+        else:
+            raise ValueError(f"不支持的触发器类型: {trigger}")
+        
+        self._scheduler.reschedule_job(job_id, trigger=trigger_obj)
+        logger.info(f"任务已重新调度: {job_id} | 触发器: {trigger}")
+    
+    def pause_job(self, job_id: str) -> None:
+        """暂停单个任务。
+        
+        Args:
+            job_id: 任务ID
+        """
+        if self._scheduler:
+            self._scheduler.pause_job(job_id)
+            logger.info(f"任务已暂停: {job_id}")
+    
+    def resume_job(self, job_id: str) -> None:
+        """恢复单个任务。
+        
+        Args:
+            job_id: 任务ID
+        """
+        if self._scheduler:
+            self._scheduler.resume_job(job_id)
+            logger.info(f"任务已恢复: {job_id}")
+    
     def start(self) -> None:
-        """启动调度器。"""
+        """启动调度器。
+        
+        启动时会注册所有通过装饰器收集的待处理任务。
+        """
         if not self._initialized:
             raise RuntimeError("调度器未初始化")
         
@@ -192,7 +346,13 @@ class SchedulerManager:
             logger.warning("调度器已在运行")
             return
         
+        # 注册所有待处理的任务
+        for job_config in self._pending_jobs:
+            self.add_job(**job_config)
+        self._pending_jobs.clear()
+        
         self._scheduler.start()
+        self._started = True
         logger.info("调度器已启动")
     
     def shutdown(self) -> None:
@@ -213,6 +373,69 @@ class SchedulerManager:
             self._scheduler.resume()
             logger.info("调度器已恢复")
     
+    def scheduled_job(
+        self,
+        trigger: str = "interval",
+        *,
+        seconds: int | None = None,
+        minutes: int | None = None,
+        hours: int | None = None,
+        days: int | None = None,
+        cron: str | None = None,
+        id: str | None = None,
+        **kwargs: Any,
+    ) -> Callable[[Callable], Callable]:
+        """任务注册装饰器。
+        
+        使用示例:
+            scheduler = SchedulerManager.get_instance()
+            
+            @scheduler.scheduled_job("interval", seconds=60)
+            async def my_task():
+                print("Task executed")
+            
+            @scheduler.scheduled_job("cron", cron="0 0 * * *")
+            async def daily_task():
+                print("Daily task")
+        
+        Args:
+            trigger: 触发器类型（interval/cron）
+            seconds: 间隔秒数
+            minutes: 间隔分钟数
+            hours: 间隔小时数
+            days: 间隔天数
+            cron: Cron表达式
+            id: 任务ID
+            **kwargs: 其他参数
+        
+        Returns:
+            装饰器函数
+        """
+        def decorator(func: Callable) -> Callable:
+            job_config = {
+                "func": func,
+                "trigger": trigger,
+                "seconds": seconds,
+                "minutes": minutes,
+                "hours": hours,
+                "days": days,
+                "cron": cron,
+                "id": id,
+                **kwargs,
+            }
+            
+            if self._started:
+                # 调度器已启动，直接注册
+                self.add_job(**job_config)
+            else:
+                # 调度器未启动，加入待注册列表
+                self._pending_jobs.append(job_config)
+                job_id = id or f"{func.__module__}.{func.__name__}"
+                logger.debug(f"任务已加入待注册列表: {job_id}")
+            
+            return func
+        return decorator
+
     def __repr__(self) -> str:
         """字符串表示。"""
         status = "running" if self._scheduler and self._scheduler.running else "stopped"

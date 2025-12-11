@@ -62,6 +62,16 @@ class DatabaseManager:
         return cls._instance
     
     @classmethod
+    def reset_instance(cls) -> None:
+        """重置单例实例（仅用于测试）。
+        
+        注意：调用此方法前应先调用 cleanup() 释放资源。
+        """
+        cls._instance = None
+        cls._initialized = False
+        cls._config = None
+    
+    @classmethod
     def configure(cls, config: DatabaseConfig) -> None:
         """配置数据库管理器。
         
@@ -83,6 +93,11 @@ class DatabaseManager:
         if self._session_factory is None:
             raise RuntimeError("数据库管理器未初始化，请先调用 initialize()")
         return self._session_factory
+    
+    @property
+    def is_initialized(self) -> bool:
+        """检查是否已初始化。"""
+        return self._initialized
     
     async def initialize(
         self,
@@ -234,6 +249,22 @@ class DatabaseManager:
         session = self.session_factory()
         await self._check_session_connection(session)
         return session
+    
+    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
+        """FastAPI 依赖注入专用的会话获取器。
+        
+        Yields:
+            AsyncSession: 数据库会话
+            
+        使用示例（FastAPI 路由）:
+            @router.get("/items")
+            async def get_items(
+                session: AsyncSession = Depends(db_manager.get_session),
+            ):
+                ...
+        """
+        async with self.session() as session:
+            yield session
     
     async def cleanup(self) -> None:
         """清理资源，关闭所有连接。"""

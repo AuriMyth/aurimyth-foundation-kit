@@ -8,7 +8,7 @@
 
 # 检查 pytest 是否可用，如果不可用则静默失败（让外层捕获）
 try:
-    import pytest  # noqa: F401
+    import pytest
 except ImportError:
     # 在生产环境，pytest 不存在，让导入失败以便外层捕获
     raise ImportError("testing 模块需要 pytest，仅在开发环境可用")

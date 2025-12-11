@@ -243,7 +243,8 @@ class ApplicationServer:
             logger.warning("调试模式已启用")
         
         if self.reload:
-            logger.info(f"热重载监控目录: {self.reload_dirs or ['./']}")
+            default_dirs = [os.getcwd()] if not self.reload_dirs else self.reload_dirs
+            logger.info(f"热重载监控目录: {default_dirs}")
 
 
 def run_app(

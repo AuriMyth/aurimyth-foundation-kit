@@ -12,12 +12,11 @@ from functools import wraps
 import time
 import uuid
 
-from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from aurimyth.foundation_kit.common.logging import get_trace_id, set_trace_id
+from aurimyth.foundation_kit.common.logging import get_trace_id, logger, set_trace_id
 
 
 def log_request[T](func: Callable[..., T]) -> Callable[..., T]:
@@ -78,14 +77,52 @@ def log_request[T](func: Callable[..., T]) -> Callable[..., T]:
     return wrapper
 
 
+# 请求/响应体最大记录长度
+MAX_BODY_LOG_SIZE = 2000
+# 不记录 body 的 Content-Type
+SKIP_BODY_CONTENT_TYPES = (
+    "multipart/form-data",
+    "application/octet-stream",
+    "image/",
+    "audio/",
+    "video/",
+)
+
+
+def _truncate_body(body: bytes | None, max_size: int = MAX_BODY_LOG_SIZE) -> str | None:
+    """截取请求/响应体用于日志记录。"""
+    if not body:
+        return None
+    try:
+        text = body.decode("utf-8")
+        if len(text) > max_size:
+            return text[:max_size] + f"...(截取，总长{len(text)})"
+        return text
+    except UnicodeDecodeError:
+        return f"<二进制数据 {len(body)} bytes>"
+
+
+def _should_log_body(content_type: str | None) -> bool:
+    """判断是否应该记录 body。"""
+    if not content_type:
+        return True
+    content_type = content_type.lower()
+    for skip_type in SKIP_BODY_CONTENT_TYPES:
+        if skip_type in content_type:
+            return False
+    return True
+
+
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """请求日志中间件（支持链路追踪）。
     
     自动记录所有HTTP请求的详细信息，包括：
-    - 请求方法、路径、查询参数
+    - 请求方法、路径、查询参数、请求体
     - 客户端IP、User-Agent
-    - 响应状态码、耗时
+    - 响应状态码、耗时、响应体
     - 链路追踪 ID（X-Trace-ID / X-Request-ID）
+    
+    注意：文件上传、二进制数据等不会记录 body 内容。
     
     使用示例:
         from aurimyth.foundation_kit.application.middleware.logging import RequestLoggingMiddleware
@@ -107,19 +144,30 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         
         # 获取客户端信息
         client_host = request.client.host if request.client else "unknown"
-        user_agent = request.headers.get("user-agent", "unknown")
+        content_type = request.headers.get("content-type", "")
         
-        # 记录请求信息
-        logger.info(
-            f"→ {request.method} {request.url.path} | "
-            f"客户端: {client_host} | "
-            f"User-Agent: {user_agent[:50]} | "
-            f"Trace-ID: {trace_id}"
-        )
+        # 读取请求体
+        request_body: bytes | None = None
+        request_body_log: str | None = None
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            try:
+                request_body = await request.body()
+                if _should_log_body(content_type):
+                    request_body_log = _truncate_body(request_body)
+                else:
+                    request_body_log = f"<{content_type}, {len(request_body)} bytes>"
+            except Exception:
+                pass
         
-        # 记录查询参数（如果有）
+        # 构建请求日志
+        request_log = f"→ {request.method} {request.url.path}"
         if request.query_params:
-            logger.debug(f"  查询参数: {dict(request.query_params)}")
+            request_log += f" | 参数: {dict(request.query_params)}"
+        if request_body_log:
+            request_log += f" | Body: {request_body_log}"
+        request_log += f" | 客户端: {client_host} | Trace-ID: {trace_id}"
+        
+        logger.info(request_log)
         
         # 执行请求
         try:
@@ -133,15 +181,20 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             status_code = response.status_code
             log_level = "error" if status_code >= 500 else "warning" if status_code >= 400 else "info"
             
-            logger.log(
-                log_level.upper(),
+            response_log = (
                 f"← {request.method} {request.url.path} | "
                 f"状态: {status_code} | "
                 f"耗时: {duration:.3f}s | "
                 f"Trace-ID: {trace_id}"
             )
+            logger.log(log_level.upper(), response_log)
             
-            # 如果响应时间过长，记录警告
+            # 写入 access 日志（简洁格式）
+            logger.bind(access=True).info(
+                f"{request.method} {request.url.path} {status_code} {duration:.3f}s"
+            )
+            
+            # 慢请求警告
             if duration > 1.0:
                 logger.warning(
                     f"慢请求: {request.method} {request.url.path} | "

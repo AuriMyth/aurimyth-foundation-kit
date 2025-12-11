@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import sys
 from typing import TYPE_CHECKING
 
@@ -19,73 +20,137 @@ app = typer.Typer(
 )
 
 
-def _get_app_instance() -> FoundationApp:
+def _detect_app_module() -> str:
+    """自动检测应用模块路径。
+
+    检测顺序：
+    1. 环境变量 APP_MODULE
+    2. pyproject.toml 的 [tool.aurimyth].app
+    3. 安装包的 entry points: [project.entry-points."aurimyth.app"]
+    4. 默认 main:app
+
+    注意：main.py 默认在项目根目录。
+    """
+    # 1. 环境变量优先
+    if env_app := os.environ.get("APP_MODULE"):
+        return env_app
+
+    # 2. 读取 pyproject.toml 配置
+    try:
+        from ..config import get_project_config
+        cfg = get_project_config()
+        if cfg.app:
+            return cfg.app
+    except Exception:
+        pass
+
+    # 3. 读取安装包 entry points（生产环境常用）
+    try:
+        from importlib.metadata import entry_points
+        eps = entry_points(group="aurimyth.app")
+        # 优先名为 default 的项，否则取第一个
+        if eps:
+            ep = next((e for e in eps if e.name == "default"), eps[0])
+            return ep.value
+    except Exception:
+        pass
+
+    # 4. 默认
+    return "main:app"
+
+
+def _get_app_instance(app_path: str | None = None) -> FoundationApp:
     """动态导入并获取应用实例。
-    
+
+    Args:
+        app_path: 应用模块路径，格式为 "module.path:variable"
+                  例如: "main:app", "myproject.main:application"
+                  如果不提供，会自动检测
+
     Returns:
         FoundationApp: 应用实例
-        
+
     Raises:
         SystemExit: 如果无法找到应用
     """
+    import importlib
+
+    # 自动检测应用模块
+    if app_path is None:
+        app_path = _detect_app_module()
+    
+    # 解析模块路径
+    if ":" not in app_path:
+        typer.echo(f"❌ 错误：无效的 app 路径格式: {app_path}", err=True)
+        typer.echo("格式应为: module.path:variable，例如: main:app", err=True)
+        raise typer.Exit(1)
+    
+    module_path, var_name = app_path.rsplit(":", 1)
+    
     try:
-        # 尝试从当前工作目录的 main.py 导入 app
-        sys.path.insert(0, os.getcwd())
+        # 添加当前工作目录到 sys.path
+        cwd = os.getcwd()
+        if cwd not in sys.path:
+            sys.path.insert(0, cwd)
         
-        try:
-            from main import app  # type: ignore
-            return app
-        except ImportError as e:
-            typer.echo("❌ 错误：无法找到 app 实例", err=True)
-            typer.echo(
-                "请确保在项目根目录运行此命令，或在 main.py 中定义 app 变量",
-                err=True,
-            )
-            raise typer.Exit(1) from e
-    finally:
-        if os.getcwd() in sys.path:
-            sys.path.remove(os.getcwd())
+        # 导入模块
+        module = importlib.import_module(module_path)
+        
+        # 获取 app 实例
+        if not hasattr(module, var_name):
+            typer.echo(f"❌ 错误：模块 {module_path} 中找不到变量 {var_name}", err=True)
+            raise typer.Exit(1)
+        
+        app_instance = getattr(module, var_name)
+        return app_instance
+        
+    except ImportError as e:
+        typer.echo(f"❌ 错误：无法导入模块 {module_path}", err=True)
+        typer.echo(f"   {e}", err=True)
+        typer.echo("请确保在项目根目录运行此命令", err=True)
+        raise typer.Exit(1) from e
 
 
 @app.command()
 def run(
-    host: str = typer.Option(
-        "127.0.0.1",
+    app_path: str | None = typer.Option(
+        None,
+        "--app",
+        "-a",
+        envvar="APP_MODULE",
+        help="应用模块路径，格式: module.path:variable（默认自动检测）",
+    ),
+    host: str | None = typer.Option(
+        None,
         "--host",
         "-h",
-        envvar="SERVER_HOST",
-        help="监听地址",
+        help="监听地址（默认使用配置文件中的 SERVER_HOST）",
     ),
-    port: int = typer.Option(
-        8000,
+    port: int | None = typer.Option(
+        None,
         "--port",
         "-p",
-        envvar="SERVER_PORT",
-        help="监听端口",
+        help="监听端口（默认使用配置文件中的 SERVER_PORT）",
     ),
-    workers: int = typer.Option(
-        1,
+    workers: int | None = typer.Option(
+        None,
         "--workers",
         "-w",
-        envvar="SERVER_WORKERS",
-        help="工作进程数",
+        help="工作进程数（默认使用配置文件中的 SERVER_WORKERS）",
     ),
     reload: bool = typer.Option(
         False,
         "--reload",
-        envvar="SERVER_RELOAD",
         help="启用热重载（开发模式）",
     ),
-    reload_dir: list[str] = typer.Option(
+    reload_dir: list[str] | None = typer.Option(
         None,
         "--reload-dir",
-        envvar="SERVER_RELOAD_DIR",
         help="热重载监控目录（可以指定多次）",
     ),
     debug: bool = typer.Option(
         False,
         "--debug",
-        envvar="DEBUG",
         help="启用调试模式",
     ),
     loop: str = typer.Option(
@@ -116,8 +181,13 @@ def run(
 ) -> None:
     """运行开发/生产服务器。
     
+    配置优先级: 命令行参数 > .env/环境变量 > 默认值
+    
     示例：
     
+        # 指定 app 模块
+        aurimyth-server run --app myproject.main:app
+        
         # 开发模式（热重载）
         aurimyth-server run --reload
         
@@ -129,14 +199,19 @@ def run(
     """
     from aurimyth.foundation_kit.application.server import ApplicationServer
     
-    app_instance = _get_app_instance()
+    app_instance = _get_app_instance(app_path)
+    
+    # 优先使用命令行参数，否则使用 app 配置
+    server_host = host if host is not None else app_instance.config.server.host
+    server_port = port if port is not None else app_instance.config.server.port
+    server_workers = workers if workers is not None else app_instance.config.server.workers
     
     # 创建服务器配置
     reload_dirs = reload_dir if reload_dir else None
     
-    typer.echo(f"🚀 启动服务器...")
-    typer.echo(f"   地址: http://{host}:{port}")
-    typer.echo(f"   工作进程: {workers}")
+    typer.echo("🚀 启动服务器...")
+    typer.echo(f"   地址: http://{server_host}:{server_port}")
+    typer.echo(f"   工作进程: {server_workers}")
     typer.echo(f"   热重载: {'✅' if reload else '❌'}")
     typer.echo(f"   调试模式: {'✅' if debug else '❌'}")
     
@@ -145,21 +220,34 @@ def run(
     
     # 创建并运行服务器
     try:
-        server = ApplicationServer(
-            app=app_instance,
-            host=host,
-            port=port,
-            workers=workers,
-            reload=reload,
-            reload_dirs=reload_dirs,
-            loop=loop,
-            http=http,
-            debug=debug,
-            access_log=not no_access_log,
-            ssl_keyfile=ssl_keyfile,
-            ssl_certfile=ssl_certfile,
-        )
-        server.run()
+        if reload:
+            # 热重载模式：直接使用 uvicorn，传递 app 字符串路径
+            import uvicorn
+            app_module_path = app_path or _detect_app_module()
+            uvicorn.run(
+                app=app_module_path,
+                host=server_host,
+                port=server_port,
+                reload=True,
+                reload_dirs=reload_dirs,
+                log_level="debug" if debug else "info",
+            )
+        else:
+            # 非热重载模式：使用 ApplicationServer
+            server = ApplicationServer(
+                app=app_instance,
+                host=server_host,
+                port=server_port,
+                workers=server_workers,
+                reload=False,
+                loop=loop,
+                http=http,
+                debug=debug,
+                access_log=not no_access_log,
+                ssl_keyfile=ssl_keyfile,
+                ssl_certfile=ssl_certfile,
+            )
+            server.run()
     except KeyboardInterrupt:
         typer.echo("\n👋 服务器已停止")
     except Exception as e:
@@ -169,6 +257,13 @@ def run(
 
 @app.command()
 def dev(
+    app_path: str | None = typer.Option(
+        None,
+        "--app",
+        "-a",
+        envvar="APP_MODULE",
+        help="应用模块路径，格式: module.path:variable（默认自动检测）",
+    ),
     host: str | None = typer.Option(
         None,
         "--host",
@@ -186,41 +281,72 @@ def dev(
     
     快捷命令，相当于 run --reload --debug
     
-    配置优先级: 命令行参数 > .env/环境变量 (SERVER_HOST/SERVER_PORT) > 默认值
+    配置优先级: 命令行参数 > .env/环境变量 > 默认值
     
     示例：
         aurimyth-server dev
+        aurimyth-server dev --app myproject.main:app
         aurimyth-server dev --port 9000
     """
     from aurimyth.foundation_kit.application.server import ApplicationServer
     
-    app_instance = _get_app_instance()
+    app_instance = _get_app_instance(app_path)
     
     # 优先使用命令行参数，否则使用 app 配置
     server_host = host if host is not None else app_instance.config.server.host
     server_port = port if port is not None else app_instance.config.server.port
+
+    # 构建默认监控目录：根目录 + 项目包目录（若存在）
+    cwd = Path.cwd()
+    reload_dirs: list[str] = [str(cwd)]  # 使用绝对路径，确保 uvicorn 能正确监控
     
-    typer.echo(f"🚀 启动开发服务器...")
+    cfg = None
+    try:
+        from ..config import get_project_config
+        cfg = get_project_config()
+        if cfg.has_package:
+            pkg_path = cwd / cfg.package
+            if pkg_path.exists():
+                reload_dirs.append(str(pkg_path))
+    except Exception:
+        pass
+
+    # 追加服务名目录（若存在且不同于包名）
+    svc_name = (app_instance.config.service.name or "").strip()
+    if svc_name and svc_name != (cfg.package if cfg and cfg.has_package else ""):
+        svc_path = cwd / svc_name
+        if svc_path.exists():
+            reload_dirs.append(str(svc_path))
+
+    # 去重
+    seen = set()
+    reload_dirs = [d for d in reload_dirs if not (d in seen or seen.add(d))]
+
+    # 获取 app 模块路径（热重载需要字符串格式）
+    app_module_path = app_path or _detect_app_module()
+    
+    typer.echo("🚀 启动开发服务器...")
     typer.echo(f"   地址: http://{server_host}:{server_port}")
-    typer.echo(f"   工作进程: 1")
-    typer.echo(f"   热重载: ✅")
-    typer.echo(f"   调试模式: ✅")
-    typer.echo(f"   监控目录: ['./']")
+    typer.echo("   工作进程: 1")
+    typer.echo("   热重载: ✅")
+    typer.echo("   调试模式: ✅")
+    typer.echo(f"   监控目录: {reload_dirs}")
+    typer.echo(f"   应用模块: {app_module_path}")
     
     try:
-        server = ApplicationServer(
-            app=app_instance,
+        import os as os_module
+        os_module.environ["AURIMYTH_RELOAD"] = "1"
+        
+        # 热重载模式下，直接使用 uvicorn，传递 app 字符串路径
+        import uvicorn
+        uvicorn.run(
+            app=app_module_path,
             host=server_host,
             port=server_port,
-            workers=1,
             reload=True,
-            reload_dirs=["./"],
-            loop="auto",
-            http="auto",
-            debug=True,
-            access_log=True,
+            reload_dirs=reload_dirs,
+            log_level="info",
         )
-        server.run()
     except KeyboardInterrupt:
         typer.echo("\n👋 服务器已停止")
     except Exception as e:
@@ -230,6 +356,13 @@ def dev(
 
 @app.command()
 def prod(
+    app_path: str | None = typer.Option(
+        None,
+        "--app",
+        "-a",
+        envvar="APP_MODULE",
+        help="应用模块路径，格式: module.path:variable（默认自动检测）",
+    ),
     host: str | None = typer.Option(
         None,
         "--host",
@@ -257,19 +390,23 @@ def prod(
     
     示例：
         aurimyth-server prod
+        aurimyth-server prod --app myproject.main:app
         aurimyth-server prod --workers 8
     """
     import os as os_module
     
     from aurimyth.foundation_kit.application.server import ApplicationServer
     
-    app_instance = _get_app_instance()
+    app_instance = _get_app_instance(app_path)
     
     # 优先使用命令行参数，否则使用 app 配置
     server_host = host if host is not None else app_instance.config.server.host
-    # 生产模式默认监听所有接口
-    if server_host == "127.0.0.1":
+    
+    # 生产模式：如果是默认的 127.0.0.1，自动改成 0.0.0.0（适合 Docker/生产环境）
+    # 用户如果明确通过命令行指定 --host 127.0.0.1，则会尊重
+    if host is None and server_host == "127.0.0.1":
         server_host = "0.0.0.0"
+    
     server_port = port if port is not None else app_instance.config.server.port
     server_workers = workers if workers is not None else app_instance.config.server.workers
     
@@ -277,11 +414,11 @@ def prod(
     if server_workers <= 1:
         server_workers = os_module.cpu_count() or 4
     
-    typer.echo(f"🚀 启动生产服务器...")
+    typer.echo("🚀 启动生产服务器...")
     typer.echo(f"   地址: http://{server_host}:{server_port}")
     typer.echo(f"   工作进程: {server_workers}")
-    typer.echo(f"   热重载: ❌")
-    typer.echo(f"   调试模式: ❌")
+    typer.echo("   热重载: ❌")
+    typer.echo("   调试模式: ❌")
     
     try:
         server = ApplicationServer(

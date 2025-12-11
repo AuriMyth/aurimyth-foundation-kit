@@ -47,9 +47,8 @@ from .config import (
 )
 from .constants import ComponentName, MiddlewareName, SchedulerMode, ServiceType
 
-# HTTP 中间件（FastAPI 中间件）
+# HTTP 中间件装饰器
 from .middleware import (
-    RequestLoggingMiddleware,
     log_request,
 )
 

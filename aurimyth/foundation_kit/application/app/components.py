@@ -5,11 +5,13 @@
 
 from __future__ import annotations
 
+import importlib
+import pkgutil
 from typing import ClassVar
 
 from aurimyth.foundation_kit.application.app.base import Component, FoundationApp
 from aurimyth.foundation_kit.application.config import BaseConfig
-from aurimyth.foundation_kit.application.constants import ComponentName, SchedulerMode, ServiceType
+from aurimyth.foundation_kit.application.constants import ComponentName, ServiceType
 from aurimyth.foundation_kit.application.migrations import MigrationManager
 from aurimyth.foundation_kit.common.logging import logger
 from aurimyth.foundation_kit.infrastructure.cache import CacheManager
@@ -74,7 +76,7 @@ class CacheComponent(Component):
             if not cache_manager._backend:
                 await cache_manager.init_app({
                     "CACHE_TYPE": config.cache.cache_type,
-                    "CACHE_REDIS_URL": config.cache.redis_url,
+                    "CACHE_URL": config.cache.url,
                     "CACHE_MAX_SIZE": config.cache.max_size,
                 })
         except Exception as e:
@@ -131,29 +133,115 @@ class TaskComponent(Component):
 
 
 class SchedulerComponent(Component):
-    """调度器组件（嵌入式模式）。"""
+    """调度器组件。
+    
+    支持两种任务发现方式：
+    1. 配置方式：通过 SCHEDULER_JOB_MODULES 指定要加载的模块
+    2. 自动感知：无配置时自动发现 schedules 模块
+    
+    @scheduler.scheduled_job() 装饰器可以在模块导入时使用，
+    任务会被收集到待注册列表，在 start() 时注册并启动。
+    """
 
     name = ComponentName.SCHEDULER
     enabled = True
     depends_on: ClassVar[list[str]] = []
 
     def can_enable(self, config: BaseConfig) -> bool:
-        """仅当是嵌入式模式时启用。"""
-        return self.enabled and config.scheduler.mode == SchedulerMode.EMBEDDED.value
+        """仅当是 API 服务且启用调度器时启用。"""
+        return (
+            self.enabled
+            and config.service.service_type == ServiceType.API.value
+            and config.scheduler.enabled
+        )
+
+    def _autodiscover_schedules(self, app: FoundationApp, config: BaseConfig) -> None:
+        """自动发现并加载定时任务模块。
+        
+        发现策略：
+        1. 如果配置了 schedule_modules，直接加载配置的模块
+        2. 优先尝试项目包名和服务名：
+           - {pyproject.tool.aurimyth.package}.schedules
+           - {SERVICE_NAME}.schedules（当 SERVICE_NAME 不是默认值时）
+        3. 从 app._caller_module 推断：
+           - __main__ / main → 尝试 schedules
+           - myapp.main → 尝试 myapp.schedules
+        4. 回退：尝试导入 schedules
+        """
+        modules_to_load: list[str] = []
+        
+        # 策略 1：配置优先
+        if config.scheduler.schedule_modules:
+            modules_to_load = list(config.scheduler.schedule_modules)
+            logger.debug(f"使用配置的定时任务模块: {modules_to_load}")
+        else:
+            # 策略 2：项目包名与服务名
+            try:
+                from aurimyth.foundation_kit.commands.config import get_project_config
+                cfg = get_project_config()
+                if cfg.has_package:
+                    modules_to_load.append(f"{cfg.package}.schedules")
+            except Exception:
+                pass
+            
+            service_name = (getattr(config.service, "name", None) or "").strip()
+            if service_name and service_name not in {"app", "main"}:
+                modules_to_load.append(f"{service_name}.schedules")
+            
+            # 策略 3：从调用者模块推断
+            caller = getattr(app, "_caller_module", "__main__")
+            if caller in ("__main__", "main"):
+                modules_to_load.append("schedules")
+            elif "." in caller:
+                package = caller.rsplit(".", 1)[0]
+                modules_to_load.extend([f"{package}.schedules", "schedules"])
+            else:
+                modules_to_load.extend([f"{caller}.schedules", "schedules"])
+        
+        # 去重，保持顺序
+        seen = set()
+        modules_to_load = [m for m in modules_to_load if not (m in seen or seen.add(m))]
+        
+        # 加载模块
+        for module_name in modules_to_load:
+            try:
+                module = importlib.import_module(module_name)
+                logger.info(f"已自动加载定时任务模块: {module_name}")
+                
+                # 递归加载包下所有子模块
+                if hasattr(module, "__path__"):
+                    for _, submodule_name, _ in pkgutil.walk_packages(
+                        module.__path__, prefix=f"{module_name}."
+                    ):
+                        try:
+                            importlib.import_module(submodule_name)
+                            logger.debug(f"已加载子模块: {submodule_name}")
+                        except Exception as e:
+                            logger.warning(f"加载子模块失败 ({submodule_name}): {e}")
+                
+                # 如果成功加载一个，且不是配置模式，就停止
+                if not config.scheduler.schedule_modules:
+                    break
+            except ImportError:
+                logger.debug(f"定时任务模块不存在: {module_name}")
+            except Exception as e:
+                logger.warning(f"加载定时任务模块失败 ({module_name}): {e}")
 
     async def setup(self, app: FoundationApp, config: BaseConfig) -> None:
-        """初始化调度器。"""
+        """启动调度器。
+        
+        1. 自动发现并加载定时任务模块
+        2. 启动调度器（注册装饰器收集的任务）
+        """
         try:
+            # 自动发现并加载定时任务模块
+            self._autodiscover_schedules(app, config)
+            
+            # 启动调度器
             scheduler = SchedulerManager.get_instance()
-            await scheduler.initialize()
-
-            # 调用应用的注册任务方法
-            if hasattr(app, "register_scheduler_jobs"):
-                await app.register_scheduler_jobs()
-
             scheduler.start()
         except Exception as e:
-            logger.warning(f"调度器初始化失败（非关键）: {e}")
+            logger.warning(f"调度器启动失败（非关键）: {e}")
 
     async def teardown(self, app: FoundationApp) -> None:
         """关闭调度器。"""
@@ -195,9 +283,14 @@ class MigrationComponent(Component):
         在应用启动时自动执行所有待处理的迁移，升级数据库到最新版本。
         """
         try:
-            # 创建迁移管理器
+            # 创建迁移管理器（从配置读取参数）
+            migration_settings = config.migration
             migration_manager = MigrationManager(
                 database_url=config.database.url,
+                config_path=migration_settings.config_path,
+                script_location=migration_settings.script_location,
+                model_modules=migration_settings.model_modules,
+                auto_create=migration_settings.auto_create,
             )
             
             # 检查是否有迁移需要执行

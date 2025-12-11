@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from aurimyth.foundation_kit.application.rpc.base import BaseRPCClient, RPCError, RPCResponse
 from aurimyth.foundation_kit.application.rpc.discovery import get_service_discovery
-from aurimyth.foundation_kit.common.logging import logger, get_trace_id
+from aurimyth.foundation_kit.common.logging import get_trace_id, logger
 from aurimyth.foundation_kit.toolkit.http import HttpClient
 
 if TYPE_CHECKING:

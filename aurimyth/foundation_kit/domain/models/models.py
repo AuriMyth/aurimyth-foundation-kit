@@ -29,6 +29,18 @@ from .mixins import (
 )
 
 
+class IDOnlyModel(IDMixin, Base):
+    """纯 int 主键模型（无时间戳，适合关系表）"""
+
+    __abstract__ = True
+
+
+class UUIDOnlyModel(UUIDMixin, Base):
+    """纯 UUID 主键模型（无时间戳，适合关系表）"""
+
+    __abstract__ = True
+
+
 class Model(IDMixin, TimestampMixin, Base):
     """【常用】标准整数主键模型"""
 

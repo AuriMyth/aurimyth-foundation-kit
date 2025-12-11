@@ -14,7 +14,6 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-
 # 事件类型定义（基础数据结构）
 EventType = TypeVar("EventType", bound="Event")
 EventHandler = (

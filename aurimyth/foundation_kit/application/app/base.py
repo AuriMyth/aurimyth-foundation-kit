@@ -8,6 +8,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+import sys
 from typing import Any, ClassVar
 
 from fastapi import FastAPI, Request, status
@@ -17,7 +18,7 @@ from starlette.middleware import Middleware as StarletteMiddleware
 from aurimyth.foundation_kit.application.config import BaseConfig
 from aurimyth.foundation_kit.application.errors import global_exception_handler
 from aurimyth.foundation_kit.application.interfaces.egress import SuccessResponse
-from aurimyth.foundation_kit.common.logging import logger, setup_logging
+from aurimyth.foundation_kit.common.logging import logger, register_log_sink, setup_logging
 from aurimyth.foundation_kit.infrastructure.cache import CacheManager
 from aurimyth.foundation_kit.infrastructure.database import DatabaseManager
 
@@ -88,14 +89,7 @@ class Component(ABC):
 
     生命周期：
     1. ``setup()`` - 在应用启动时（lifespan 开始阶段）异步调用。
-       用于异步初始化（如数据库连接、缓存连接等）。
     2. ``teardown()`` - 在应用关闭时（lifespan 结束阶段）异步调用。
-       用于清理资源。
-
-    设计原则：
-    - 专注基础设施生命周期管理
-    - 异步初始化和清理
-    - 支持依赖声明和拓扑排序
 
     使用示例:
         class MyService(Component):
@@ -133,8 +127,6 @@ class Component(ABC):
     @abstractmethod
     async def setup(self, app: FoundationApp, config: BaseConfig) -> None:
         """组件启动时调用（异步，在 lifespan 开始阶段）。
-
-        用于异步初始化操作，如数据库连接、缓存连接等。
 
         Args:
             app: 应用实例
@@ -226,18 +218,24 @@ class FoundationApp(FastAPI):
         if config is None:
             config = BaseConfig()
         self._config = config
+        
+        # 记录调用者模块（用于自动发现 schedules 等模块）
+        frame = sys._getframe(1)
+        self._caller_module = frame.f_globals.get("__name__", "__main__")
 
         # 初始化日志（必须在其他操作之前）
         setup_logging(
             log_level=config.log.level,
             log_dir=config.log.dir,
+            service_type=config.service.service_type,
             rotation_time=config.log.rotation_time,
-            rotation_size=config.log.rotation_size,
             retention_days=config.log.retention_days,
             enable_file_rotation=config.log.enable_file_rotation,
-            enable_classify=config.log.enable_classify,
             enable_console=config.log.enable_console,
         )
+        
+        # 注册 access 日志（HTTP 请求日志）
+        register_log_sink("access", filter_key="access")
 
         # 初始化中间件和组件管理
         self._middlewares: dict[str, Middleware] = {}
@@ -494,7 +492,7 @@ class FoundationApp(FastAPI):
             )
 
             return JSONResponse(
-                content=SuccessResponse(data=health_status).model_dump(),
+                content=SuccessResponse(data=health_status).model_dump(mode="json"),
                 status_code=status_code,
             )
         

@@ -64,46 +64,54 @@ uv sync
 
 ## 依赖安装
 
-### 完整依赖
+Foundation Kit 采用模块化的可选依赖设计，按需安装。
 
-```toml
-[project]
-dependencies = [
-    "aurimyth-foundation-kit>=0.1.0",
-    "uvicorn[standard]>=0.24.0",
-    "python-dotenv>=1.0.0",
-]
+### 安装方式
+
+```bash
+# 核心（只有核心框架，不含数据库/缓存等驱动）
+uv add aurimyth-foundation-kit
+
+# 推荐（PostgreSQL + Redis + 任务队列 + 调度器）
+uv add "aurimyth-foundation-kit[recommended]"
+
+# 按需组合
+uv add "aurimyth-foundation-kit[postgres,redis,scheduler]"
+
+# 全部依赖
+uv add "aurimyth-foundation-kit[all]"
 ```
 
-### 可选依赖
+### 可选依赖清单
 
-```toml
-[project.optional-dependencies]
-# 数据库支持
-postgres = [
-    "asyncpg>=0.29.0",
-    "psycopg[binary]>=3.14.0",
-]
+| 名称 | 说明 | 包含的库 |
+|------|------|----------|
+| `postgres` | PostgreSQL 数据库 | asyncpg |
+| `mysql` | MySQL 数据库 | aiomysql |
+| `sqlite` | SQLite 数据库 | aiosqlite |
+| `redis` | Redis 缓存 | redis |
+| `s3` | S3 对象存储 | aioboto3 |
+| `tasks` | 任务队列（Dramatiq + Kombu） | dramatiq, kombu, dramatiq-kombu-broker |
+| `rabbitmq` | RabbitMQ 支持（配合 tasks） | amqp |
+| `scheduler` | 定时调度 | apscheduler |
+| `recommended` | 推荐组合 | postgres + redis + tasks + scheduler |
+| `all` | 全部依赖 | 以上所有 |
+| `dev` | 开发工具 | pytest, ruff, mypy, mkdocs |
 
-# Redis 支持
-redis = [
-    "redis>=5.0.0",
-]
+### 常见组合示例
 
-# RabbitMQ 支持
-amqp = [
-    "aio-pika>=10.0.0",
-]
+```bash
+# Web API 服务（数据库 + 缓存）
+uv add "aurimyth-foundation-kit[postgres,redis]"
 
-# 开发工具
-dev = [
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-cov>=4.1.0",
-    "mypy>=1.5.0",
-    "ruff>=0.1.0",
-    "black>=23.0.0",
-]
+# 后台任务服务（数据库 + 任务队列 + RabbitMQ）
+uv add "aurimyth-foundation-kit[postgres,tasks,rabbitmq]"
+
+# 定时任务服务（数据库 + 调度器）
+uv add "aurimyth-foundation-kit[postgres,scheduler]"
+
+# 完整微服务（推荐）
+uv add "aurimyth-foundation-kit[recommended]"
 ```
 
 ### 完整 pyproject.toml 示例
@@ -118,37 +126,29 @@ name = "my-service"
 version = "0.1.0"
 description = "My AuriMyth service"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 authors = [
     { name = "Your Name", email = "you@example.com" }
 ]
 
 dependencies = [
-    "aurimyth-foundation-kit @ git+https://github.com/AuriMythNeo/aurimyth-foundation-kit.git",
-    "uvicorn[standard]>=0.24.0",
-    "python-dotenv>=1.0.0",
-    "sqlalchemy>=2.0.0",
-    "asyncpg>=0.29.0",
-    "redis>=5.0.0",
+    "aurimyth-foundation-kit[recommended]",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.21.0",
-    "mypy>=1.5.0",
-    "ruff>=0.1.0",
+    "pytest>=9.0.1",
+    "pytest-asyncio>=1.3.0",
+    "mypy>=1.19.0",
+    "ruff>=0.14.7",
 ]
-
-[tool.uv]
-python-version = "3.10"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.13"
 strict = true
 ```
 

@@ -66,16 +66,21 @@ class CacheSettings(BaseSettings):
     """缓存配置。
     
     环境变量前缀: CACHE_
-    示例: CACHE_TYPE, CACHE_REDIS_URL, CACHE_MAX_SIZE
+    示例: CACHE_TYPE, CACHE_URL, CACHE_MAX_SIZE
+    
+    支持的缓存类型：
+    - memory: 内存缓存（默认，无需 URL）
+    - redis: Redis 缓存（需要设置 CACHE_URL）
+    - memcached: Memcached 缓存（需要设置 CACHE_URL）
     """
     
     cache_type: str = Field(
         default="memory",
-        description="缓存类型"
+        description="缓存类型 (memory/redis/memcached)"
     )
-    redis_url: str | None = Field(
+    url: str | None = Field(
         default=None,
-        description="Redis缓存URL"
+        description="缓存服务 URL（如 redis://localhost:6379）"
     )
     max_size: int = Field(
         default=1000,
@@ -196,21 +201,26 @@ class LogSettings(BaseSettings):
 
 class ServiceSettings(BaseSettings):
     """服务配置。
-    
+
     环境变量前缀: SERVICE_
-    示例: SERVICE_TYPE
-    
+    示例: SERVICE_NAME, SERVICE_TYPE
+
     服务类型说明：
-    - api: 运行 API 服务（可伴随调度器，根据 SCHEDULER_MODE 决定调度器运行方式）
+    - api: 运行 API 服务（SCHEDULER_ENABLED 决定是否同时运行调度器）
     - worker: 运行任务队列 Worker（处理异步任务）
-    - scheduler: 仅运行调度器进程（独立 pod，只运行定时任务，不运行 API）
+
+    独立调度器通过 `aum scheduler` 命令运行，不需要配置 SERVICE_TYPE。
     """
-    
+
+    name: str = Field(
+        default="app",
+        description="服务名称，用于日志目录区分"
+    )
     service_type: str = Field(
         default="api",
-        description="服务类型（api/worker/scheduler）"
+        description="服务类型（api/worker）"
     )
-    
+
     model_config = SettingsConfigDict(
         env_prefix="SERVICE_",
         case_sensitive=False,
@@ -221,19 +231,22 @@ class SchedulerSettings(BaseSettings):
     """调度器配置。
     
     环境变量前缀: SCHEDULER_
-    示例: SCHEDULER_MODE
+    示例: SCHEDULER_ENABLED, SCHEDULER_SCHEDULE_MODULES
     
-    调度器模式说明（仅在 SERVICE_TYPE=api 时有效）：
-    - embedded: 在 API 进程中运行调度器（默认）
-    - standalone: 调度器在独立进程中运行
-    - disabled: 禁用调度器
+    仅在 SERVICE_TYPE=api 时有效：
+    - SCHEDULER_ENABLED=true: API 服务同时运行内嵌调度器（默认）
+    - SCHEDULER_ENABLED=false: 只运行 API，不启动调度器
     
-    当 SERVICE_TYPE=scheduler 时，会启动一个独立的调度器进程，此配置无效。
+    独立调度器通过 `aum scheduler` 命令运行，不需要此配置。
     """
     
-    mode: str = Field(
-        default="embedded",
-        description="调度器运行模式（embedded/standalone/disabled），仅在 SERVICE_TYPE=api 时有效"
+    enabled: bool = Field(
+        default=True,
+        description="是否在 API 服务中启用内嵌调度器"
+    )
+    schedule_modules: list[str] = Field(
+        default_factory=list,
+        description="定时任务模块列表。为空时自动发现 schedules 模块"
     )
     
     model_config = SettingsConfigDict(
@@ -302,7 +315,7 @@ class MigrationSettings(BaseSettings):
         description="Alembic 配置文件路径"
     )
     script_location: str = Field(
-        default="alembic",
+        default="migrations",
         description="Alembic 迁移脚本目录"
     )
     model_modules: list[str] = Field(
@@ -411,8 +424,8 @@ class HealthCheckSettings(BaseSettings):
     """
     
     path: str = Field(
-        default="/health",
-        description="健康检查端点路径（默认: /health）"
+        default="/api/health",
+        description="健康检查端点路径（默认: /api/health）"
     )
     enabled: bool = Field(
         default=True,

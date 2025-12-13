@@ -224,6 +224,37 @@ class MyApp(FoundationApp):
 # ✅ 数据库已是最新版本，无需迁移
 ```
 
+### 6. AdminConsoleComponent（可选）
+
+提供基于 **SQLAdmin** 的管理后台（默认路径：`/api/admin-console`），用于快速搭建生产可用的后台管理能力。
+
+> 依赖：`uv add "aurimyth-foundation-kit[admin]"`（需同步数据库驱动）
+
+```python
+from aurimyth.foundation_kit.application.app.components import AdminConsoleComponent
+
+class MyApp(FoundationApp):
+    components = [
+        AdminConsoleComponent,
+    ]
+```
+
+**配置**（.env）：
+
+```bash
+ADMIN_ENABLED=true
+ADMIN_PATH=/api/admin-console
+
+# SQLAdmin 通常要求同步 Engine；若 DATABASE_URL 是异步驱动，建议显式提供同步 URL
+# ADMIN_DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/mydb
+
+# 认证（默认推荐 basic 或 bearer）
+ADMIN_AUTH_MODE=basic
+ADMIN_AUTH_SECRET_KEY=CHANGE_ME_TO_A_RANDOM_SECRET
+ADMIN_AUTH_BASIC_USERNAME=admin
+ADMIN_AUTH_BASIC_PASSWORD=change_me
+```
+
 ## 自定义组件
 
 ### 基本结构

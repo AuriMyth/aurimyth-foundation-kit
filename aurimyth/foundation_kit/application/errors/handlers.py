@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from aurimyth.foundation_kit.common.exceptions import FoundationError
 from aurimyth.foundation_kit.common.logging import logger
@@ -96,7 +96,8 @@ class ErrorHandler(ABC):
     
     async def _default_handle(self, exception: Exception, request: Request) -> JSONResponse:
         """默认异常处理。"""
-        logger.exception(f"未处理的异常: {exception}")
+        logger.exception(f"未处理的异常: {request.method} {request.url.path}")
+        
         response = ResponseBuilder.fail(
             message="服务器内部错误",
             code=-1,
@@ -256,8 +257,46 @@ class DatabaseErrorHandler(ErrorHandler):
                 content=response.model_dump(mode="json"),
             )
         
+        # 处理唯一约束冲突（如重复的 email、username 等）
+        if isinstance(exception, IntegrityError):
+            logger.warning(f"数据库完整性约束冲突: {exception}")
+            
+            # 解析错误信息，提取字段名
+            error_msg = str(exception.orig) if exception.orig else str(exception)
+            field_name = None
+            
+            # 尝试从错误信息中提取字段名
+            if "unique constraint" in error_msg.lower() or "duplicate key" in error_msg.lower():
+                # PostgreSQL: Key (email)=(xxx) already exists
+                # MySQL: Duplicate entry 'xxx' for key 'users.email'
+                import re
+                # PostgreSQL 格式
+                match = re.search(r"Key \((\w+)\)", error_msg)
+                if match:
+                    field_name = match.group(1)
+                else:
+                    # MySQL 格式
+                    match = re.search(r"for key ['\"]?\w+\.(\w+)['\"]?", error_msg, re.IGNORECASE)
+                    if match:
+                        field_name = match.group(1)
+            
+            if field_name:
+                message = f"{field_name} 已存在"
+            else:
+                message = "数据已存在，请检查唯一字段"
+            
+            response = ResponseBuilder.fail(
+                message=message,
+                code=409,
+            )
+            
+            return JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content=response.model_dump(mode="json"),
+            )
+        
         # 处理其他数据库错误
-        logger.exception(f"数据库错误: {exception}")
+        logger.exception(f"数据库错误: {request.method} {request.url.path}")
         
         response = ResponseBuilder.fail(
             message="数据库操作失败",

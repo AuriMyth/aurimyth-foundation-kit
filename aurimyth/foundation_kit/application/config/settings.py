@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from dotenv import load_dotenv
 from pydantic import Field
@@ -173,8 +174,8 @@ class LogSettings(BaseSettings):
         description="日志文件轮转时间 (HH:MM 格式，每天定时轮转)"
     )
     rotation_size: str = Field(
-        default="100 MB",
-        description="日志文件轮转大小阈值（基于大小的轮转）"
+        default="50 MB",
+        description="日志文件轮转大小阈值（超过此大小会产生 .1, .2 等后缀文件）"
     )
     retention_days: int = Field(
         default=7,
@@ -191,6 +192,10 @@ class LogSettings(BaseSettings):
     enable_console: bool = Field(
         default=True,
         description="是否输出日志到控制台"
+    )
+    websocket_log_messages: bool = Field(
+        default=False,
+        description="是否记录 WebSocket 消息内容（注意性能和敏感数据）"
     )
     
     model_config = SettingsConfigDict(
@@ -438,6 +443,81 @@ class HealthCheckSettings(BaseSettings):
     )
 
 
+class AdminAuthSettings(BaseSettings):
+    """管理后台认证配置。
+
+    环境变量前缀: ADMIN_AUTH_
+    示例: ADMIN_AUTH_MODE, ADMIN_AUTH_SECRET_KEY, ADMIN_AUTH_BASIC_USERNAME
+
+    说明：
+    - 内置模式仅保证 basic / bearer 开箱即用
+    - jwt/custom 推荐由用户自定义 backend 实现（见 ADMIN_AUTH_BACKEND）
+    """
+
+    mode: Literal["none", "basic", "bearer", "jwt", "custom"] = Field(
+        default="basic",
+        description="认证模式 (none/basic/bearer/jwt/custom)",
+    )
+
+    # SQLAdmin AuthenticationBackend 需要 secret_key 用于 session 签名
+    secret_key: str | None = Field(
+        default=None,
+        description="Session 签名密钥（生产环境必须配置）",
+    )
+
+    # basic：用户名/密码（用于 SQLAdmin 登录页）
+    basic_username: str | None = Field(default=None, description="Basic 登录用户名")
+    basic_password: str | None = Field(default=None, description="Basic 登录密码")
+
+    # bearer：token 白名单（支持 Authorization: Bearer <token>，也支持登录页使用 token）
+    bearer_tokens: list[str] = Field(default_factory=list, description="Bearer token 白名单")
+
+    # custom/jwt：用户自定义认证后端（动态导入）
+    backend: str | None = Field(
+        default=None,
+        description='自定义认证后端导入路径，如 "yourpkg.admin_auth:backend"',
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="ADMIN_AUTH_",
+        case_sensitive=False,
+    )
+
+
+class AdminConsoleSettings(BaseSettings):
+    """SQLAdmin 管理后台配置。
+
+    环境变量前缀: ADMIN_
+    示例: ADMIN_ENABLED, ADMIN_PATH, ADMIN_DATABASE_URL
+    """
+
+    enabled: bool = Field(default=False, description="是否启用管理后台")
+
+    path: str = Field(
+        default="/api/admin-console",
+        description="管理后台路径（默认 /api/admin-console）",
+    )
+
+    # SQLAdmin 目前通常要求同步 SQLAlchemy Engine；此处允许单独指定同步数据库 URL
+    database_url: str | None = Field(
+        default=None,
+        description="管理后台专用数据库连接（同步 URL，可覆盖自动推导）",
+    )
+
+    # 显式指定项目侧 admin 模块路径（可选）
+    views_module: str | None = Field(
+        default=None,
+        description="项目侧 admin-console 模块（用于注册 views/auth），如 app.admin_console",
+    )
+
+    auth: AdminAuthSettings = Field(default_factory=AdminAuthSettings, description="管理后台认证配置")
+
+    model_config = SettingsConfigDict(
+        env_prefix="ADMIN_",
+        case_sensitive=False,
+    )
+
+
 class BaseConfig(BaseSettings):
     """基础配置类。
     
@@ -470,6 +550,9 @@ class BaseConfig(BaseSettings):
     
     # 健康检查配置
     health_check: HealthCheckSettings = Field(default_factory=HealthCheckSettings)
+
+    # 管理后台配置（SQLAdmin）
+    admin: AdminConsoleSettings = Field(default_factory=AdminConsoleSettings)
     
     # ========== 数据与缓存 ==========
     # 数据库配置
@@ -514,6 +597,8 @@ class BaseConfig(BaseSettings):
 
 
 __all__ = [
+    "AdminAuthSettings",
+    "AdminConsoleSettings",
     "BaseConfig",
     "CORSSettings",
     "CacheSettings",

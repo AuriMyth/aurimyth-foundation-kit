@@ -151,6 +151,7 @@ Commands:
 | `bool`, `boolean` | 布尔值 |
 | `datetime` | 日期时间 |
 | `date` | 日期 |
+| `time` | 时间 |
 | `json`, `dict` | JSON 对象 |
 
 **修饰符**：
@@ -186,10 +187,13 @@ Arguments:
 
 Options:
   -i, --interactive   交互式添加字段
+  -b, --base TEXT     模型基类（默认 UUIDAuditableStateModel）
   -f, --force         强制覆盖
   --no-soft-delete    禁用软删除
   --no-timestamps     禁用时间戳
 ```
+
+可用基类：IDOnlyModel, UUIDOnlyModel, Model, AuditableStateModel, UUIDModel, UUIDAuditableStateModel, VersionedModel, VersionedTimestampedModel, VersionedUUIDModel, FullFeaturedModel, FullFeaturedUUIDModel。
 
 生成 `models/{name}.py`，默认继承 `UUIDAuditableStateModel`。
 
@@ -255,8 +259,10 @@ aum generate crud NAME [FIELDS...] [OPTIONS]
 
 Options:
   -i, --interactive   交互式添加字段
+  -b, --base TEXT     模型基类（默认 UUIDAuditableStateModel）
   -f, --force         强制覆盖
   --no-soft-delete    禁用软删除
+  --no-timestamps     禁用时间戳
 ```
 
 一键生成完整 CRUD：model + repo + service + schema + api。

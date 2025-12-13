@@ -2,7 +2,7 @@
 
 ## 系统要求
 
-- **Python 版本**：>= 3.10
+- **Python 版本**：>= 3.13
 - **操作系统**：Linux, macOS, Windows
 - **包管理工具**：uv（推荐）或 pip
 
@@ -96,7 +96,8 @@ uv add "aurimyth-foundation-kit[all]"
 | `scheduler` | 定时调度 | apscheduler |
 | `recommended` | 推荐组合 | postgres + redis + tasks + scheduler |
 | `all` | 全部依赖 | 以上所有 |
-| `dev` | 开发工具 | pytest, ruff, mypy, mkdocs |
+| `dev` | 开发工具 | pytest, ruff, mypy |
+| `docs` | 文档生成 | mkdocs, mkdocs-material |
 
 ### 常见组合示例
 
@@ -187,9 +188,9 @@ uv run python test_install.py
 
 ## 常见问题
 
-### Q: 能在 Python 3.9 上使用吗？
+### Q: 能在 Python 3.12 或更低版本上使用吗？
 
-A: 不行。Kit 使用了 Python 3.10+ 的特性（如类型注解新语法）。必须升级到 3.10+。
+A: 不行。Kit 使用了 Python 3.13+ 的特性（如类型注解新语法、改进的泛型等）。必须使用 Python 3.13 或更高版本。
 
 ### Q: uv 和 pip 有什么区别？
 
@@ -214,7 +215,7 @@ uv sync --frozen
 ### Q: 在 Docker 中安装
 
 ```dockerfile
-FROM python:3.10-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 

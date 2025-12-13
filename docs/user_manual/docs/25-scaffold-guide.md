@@ -14,19 +14,18 @@ uv init . --name my_service --no-package --python 3.13
 # 2. 安装 AuriMyth Foundation Kit
 uv add "aurimyth-foundation-kit[recommended]"
 
-# 3. 初始化脚手架（推荐交互式模式）
-aurimyth init -i              # 交互式，会询问配置选项
-# 或
-aurimyth init                 # 默认配置
-aurimyth init my_package      # 使用顶层包结构
-aurimyth init --docker        # 同时生成 Docker 配置
+# 3. 初始化脚手架
+aum init                 # 交互式模式（默认），会询问配置选项
+aum init -y              # 跳过交互，使用默认配置
+aum init my_package      # 使用顶层包结构
+aum init --docker        # 同时生成 Docker 配置
 
 # 4. 配置环境变量
 cp .env.example .env
 # 编辑 .env 文件配置数据库等
 
 # 5. 启动开发服务器
-aurimyth server dev
+aum server dev
 ```
 
 > **注意**：`init` 会覆盖 `uv init` 创建的默认 `main.py`，这是正常行为。
@@ -37,37 +36,37 @@ aurimyth server dev
 
 ```bash
 # 一键生成完整 CRUD（带字段定义）
-aurimyth generate crud user email:str:unique age:int? status:str=active
+aum generate crud user email:str:unique age:int? status:str=active
 
 # 在 main.py 中注册路由
 # from api import user
 # app.include_router(user.router, prefix="/api/users", tags=["User"])
 
 # 生成数据库迁移
-aurimyth migrate make -m "add user table"
+aum migrate make -m "add user table"
 
 # 执行迁移
-aurimyth migrate up
+aum migrate up
 ```
 
 ### 字段语法
 
 ```bash
 # 格式: name:type:modifiers
-# 类型: str, str(100), text, int, bigint, float, decimal, bool, datetime, date, json
+# 类型: str, str(100), text, int, bigint, float, decimal, bool, datetime, date, time, json
 # 修饰符: ? (可空), unique, index, =默认值
 
 # 更多示例
-aurimyth generate crud article title:str(200) content:text status:str=draft
-aurimyth generate crud product name:str:unique price:decimal stock:int=0
+aum generate crud article title:str(200) content:text status:str=draft
+aum generate crud product name:str:unique price:decimal stock:int=0
 
 # 交互式模式
-aurimyth generate crud user -i
+aum generate crud user -i
 ```
 
 ## 交互式模式详解
 
-使用 `aurimyth init -i` 进入交互式模式，会依次询问：
+`aum init` 默认使用交互式模式，会依次询问：
 
 1. **项目结构**
    - 平铺结构：文件直接在项目根目录（简单项目）
@@ -102,14 +101,14 @@ aurimyth generate crud user -i
 
 ### 平铺结构（默认）
 
-执行 `aurimyth init` 后：
+执行 `aum init` 后：
 
 ```
 my-service/
 ├── main.py              # 应用入口
 ├── config.py            # 配置定义
 ├── alembic.ini          # Alembic 配置
-├── pyproject.toml       # 项目配置（已添加 ruff/pytest/aurimyth 配置）
+├── pyproject.toml       # 项目配置（已添加 ruff/pytest/aum 配置）
 ├── .env.example         # 环境变量模板
 ├── README.md            # 项目说明
 │
@@ -139,7 +138,7 @@ my-service/
 
 ### 顶层包结构
 
-执行 `aurimyth init my_package` 后：
+执行 `aum init my_package` 后：
 
 ```
 my-service/
@@ -192,10 +191,10 @@ AuriMyth 采用分层架构，代码生成器会按规范生成代码：
 
 ```bash
 # 基本用法
-aurimyth generate model user
+aum generate model user
 
 # 带字段定义
-aurimyth generate model user email:str:unique age:int? status:str=active
+aum generate model user email:str:unique age:int? status:str=active
 ```
 
 生成 `models/user.py`：
@@ -228,10 +227,10 @@ class User(UUIDAuditableStateModel):
 
 ```bash
 # 基本用法
-aurimyth generate repo user
+aum generate repo user
 
 # 带 unique 字段（自动生成 get_by_xxx 方法）
-aurimyth generate repo user email:str:unique
+aum generate repo user email:str:unique
 ```
 
 生成 `repositories/user_repository.py`：
@@ -264,10 +263,10 @@ class UserRepository(BaseRepository[User]):
 
 ```bash
 # 基本用法
-aurimyth generate service user
+aum generate service user
 
 # 带 unique 字段（自动生成重复检测）
-aurimyth generate service user email:str:unique
+aum generate service user email:str:unique
 ```
 
 生成 `services/user_service.py`：
@@ -314,7 +313,7 @@ class UserService(BaseService):
 ### 生成 Schema
 
 ```bash
-aurimyth generate schema user
+aum generate schema user
 ```
 
 生成 `schemas/user.py`：
@@ -355,7 +354,7 @@ class UserResponse(UserBase):
 ### 生成 API
 
 ```bash
-aurimyth generate api user
+aum generate api user
 ```
 
 生成 `api/user.py`，包含完整的 CRUD 路由：
@@ -370,23 +369,23 @@ aurimyth generate api user
 
 ```bash
 # 无字段
-aurimyth generate crud user
+aum generate crud user
 
 # 带字段定义（推荐）
-aurimyth generate crud user email:str:unique age:int? status:str=active
+aum generate crud user email:str:unique age:int? status:str=active
 
 # 交互式
-aurimyth generate crud user -i
+aum generate crud user -i
 ```
 
 等同于依次执行：
 
 ```bash
-aurimyth generate model user email:str:unique age:int? status:str=active
-aurimyth generate repo user email:str:unique
-aurimyth generate service user email:str:unique
-aurimyth generate schema user email:str:unique age:int? status:str=active
-aurimyth generate api user
+aum generate model user email:str:unique age:int? status:str=active
+aum generate repo user email:str:unique
+aum generate service user email:str:unique
+aum generate schema user email:str:unique age:int? status:str=active
+aum generate api user
 ```
 
 ## 注册路由
@@ -406,13 +405,13 @@ app.include_router(user.router, prefix="/api/users", tags=["User"])
 
 ```bash
 # 生成迁移文件
-aurimyth migrate make -m "add user table"
+aum migrate make -m "add user table"
 
 # 执行迁移
-aurimyth migrate up
+aum migrate up
 
 # 查看状态
-aurimyth migrate status
+aum migrate status
 ```
 
 ## 自定义生成的代码
@@ -522,20 +521,39 @@ async def create_user_with_profile(self, data):
 使用 `--force` 选项：
 
 ```bash
-aurimyth generate crud user --force
+aum generate crud user --force
 ```
 
 ### Q: 如何生成不同类型的主键？
 
-默认使用 UUID 主键。如需整数主键，修改生成的 Model：
+使用 `--base` 选项指定基类：
 
-```python
-from aurimyth.foundation_kit.domain.models import Model
+```bash
+# UUID 主键 + 软删除（默认推荐）
+aum generate crud user -b UUIDAuditableStateModel
 
-class User(Model):  # 使用 Model 而不是 UUIDAuditableStateModel
-    __tablename__ = "users"
-    # ...
+# int 主键 + 时间戳
+aum generate crud user -b Model
+
+# int 主键 + 软删除
+aum generate crud user -b AuditableStateModel
+
+# UUID 主键 + 乐观锁
+aum generate crud user -b VersionedUUIDModel
 ```
+
+可用基类：
+- `IDOnlyModel` - 纯 int 主键（无时间戳）
+- `UUIDOnlyModel` - 纯 UUID 主键（无时间戳）
+- `Model` - int 主键 + 时间戳
+- `AuditableStateModel` - int 主键 + 软删除
+- `UUIDModel` - UUID 主键 + 时间戳
+- `UUIDAuditableStateModel` - UUID 主键 + 软删除（默认推荐）
+- `VersionedModel` - int 主键 + 乐观锁
+- `VersionedTimestampedModel` - int 主键 + 乐观锁 + 时间戳
+- `VersionedUUIDModel` - UUID 主键 + 乐观锁
+- `FullFeaturedModel` - int 主键 + 全功能
+- `FullFeaturedUUIDModel` - UUID 主键 + 全功能
 
 ### Q: 如何自定义模板？
 

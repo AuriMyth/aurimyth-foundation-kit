@@ -5,6 +5,7 @@
 
 from .base import Component, FoundationApp, Middleware
 from .components import (
+    AdminConsoleComponent,
     CacheComponent,
     DatabaseComponent,
     MigrationComponent,
@@ -26,6 +27,7 @@ __all__ = [
     "CORSMiddleware",
     "RequestLoggingMiddleware",
     # 组件
+    "AdminConsoleComponent",
     "CacheComponent",
     "DatabaseComponent",
     "MigrationComponent",

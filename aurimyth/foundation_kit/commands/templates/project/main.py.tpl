@@ -9,20 +9,22 @@
 """
 
 from aurimyth.foundation_kit.application.app.base import FoundationApp
-from aurimyth.foundation_kit.application.app.components import (
-    CacheComponent,
-    DatabaseComponent,
-    MigrationComponent,
-    SchedulerComponent,
-)
-from aurimyth.foundation_kit.application.interfaces.egress import BaseResponse
 
+from {import_prefix}api import router as api_router
 from {import_prefix}config import AppConfig
 
 # 创建配置
 config = AppConfig()
 
 # 创建应用
+#
+# 框架默认注册端点：
+#   - GET /api/health  健康检查（检查数据库/缓存状态）
+#
+# 可通过环境变量配置：
+#   - HEALTH_CHECK_PATH: 健康检查路径（默认 /api/health）
+#   - HEALTH_CHECK_ENABLED: 是否启用（默认 true）
+#
 app = FoundationApp(
     title="{project_name}",
     version="0.1.0",
@@ -30,9 +32,7 @@ app = FoundationApp(
     config=config,
 )
 
-
 # 注册 API 路由
-from {import_prefix}api import router as api_router
 app.include_router(api_router, prefix="/api")
 
 

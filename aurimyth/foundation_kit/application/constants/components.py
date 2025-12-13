@@ -16,6 +16,7 @@ class MiddlewareName(str, Enum):
 
     # HTTP 中间件
     REQUEST_LOGGING = "request_logging"
+    WEBSOCKET_LOGGING = "websocket_logging"
     CORS = "cors"
 
 
@@ -36,6 +37,9 @@ class ComponentName(str, Enum):
 
     # 迁移组件
     MIGRATIONS = "migrations"
+
+    # 管理后台（可选扩展）
+    ADMIN_CONSOLE = "admin_console"
 
 
 __all__ = [

@@ -52,48 +52,74 @@ AuriMyth Foundation Kit 是 FastAPI 的增强层，提供微服务开发所需�
 mkdir my-service && cd my-service
 uv init . --name my_service --no-package --python 3.13
 
-# 2. 安装框架
+# 2. （可选）配置清华源以加速安装
+# 在 pyproject.toml 中添加以下配置
+cat >> pyproject.toml << EOF
+
+[tool.uv]
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+EOF
+
+# 3. 安装框架
 uv add "aurimyth-foundation-kit[recommended]"
 
-# 3. 初始化脚手架（推荐交互式模式）
-aurimyth init -i              # 交互式，会询问配置选项
-# 或
-aurimyth init                 # 使用默认配置
-aurimyth init my_package      # 使用顶层包结构
-aurimyth init --docker        # 同时生成 Docker 配置
+# 4. 初始化脚手架
+aum init                 # 交互式模式（默认），会询问配置选项
+aum init -y              # 跳过交互，使用默认配置
+aum init my_package      # 使用顶层包结构
+aum init --docker        # 同时生成 Docker 配置
 
-# 4. 配置环境变量
+# 5. 配置环境变量
 cp .env.example .env
 # 编辑 .env 配置数据库连接
 
-# 5. 生成 CRUD 代码
-aurimyth generate crud user email:str:unique age:int? status:str=active
+# 6. 生成 CRUD 代码
+aum generate crud user email:str:unique age:int? status:str=active
 
-# 6. 生成并执行数据库迁移
-aurimyth migrate make -m "initial"
-aurimyth migrate up
+# 7. 生成并执行数据库迁移
+aum migrate make -m "initial"
+aum migrate up
 
-# 7. 启动开发服务器
-aurimyth server dev
+# 8. 启动开发服务器
+aum server dev
 ```
 
 > **注意**：`init` 会覆盖 `uv init` 创建的默认 `main.py`，这是正常行为。
 
 访问 http://localhost:8000/docs 查看 API 文档。
 
+### （可选）启用管理后台 Admin Console
+
+框架提供可选的 SQLAdmin 管理后台扩展，默认路径：`/api/admin-console`，适合生产快速搭建后台管理能力。
+
+```bash
+# 安装扩展依赖
+uv add "aurimyth-foundation-kit[admin]"
+
+# 在 .env 中启用并设置 basic 认证
+ADMIN_ENABLED=true
+ADMIN_PATH=/api/admin-console
+ADMIN_AUTH_MODE=basic
+ADMIN_AUTH_SECRET_KEY=CHANGE_ME_TO_A_RANDOM_SECRET
+ADMIN_AUTH_BASIC_USERNAME=admin
+ADMIN_AUTH_BASIC_PASSWORD=change_me
+```
+
+启动服务后访问：`http://localhost:8000/api/admin-console`
+
 ### 字段语法说明
 
 ```bash
 # 格式: name:type:modifiers
-# 类型: str, text, int, float, decimal, bool, datetime, date, json
+# 类型: str, text, int, bigint, float, decimal, bool, datetime, date, time, json
 # 修饰符: ? (可空), unique, index, =默认值
 
 # 示例
-aurimyth generate crud article title:str(200) content:text status:str=draft
-aurimyth generate crud product name:str:unique price:decimal stock:int=0
+aum generate crud article title:str(200) content:text status:str=draft
+aum generate crud product name:str:unique price:decimal stock:int=0
 
 # 交互式模式
-aurimyth generate crud user -i
+aum generate crud user -i
 ```
 
 ---
@@ -139,10 +165,10 @@ if __name__ == "__main__":
 
 ```bash
 # 开发模式（热重载）
-aurimyth server dev
+aum server dev
 
 # 生产模式（多进程）
-aurimyth server prod
+aum server prod
 ```
 
 ---
@@ -153,10 +179,10 @@ aurimyth server prod
 
 ```bash
 # 开发模式（热重载）
-aurimyth server dev
+aum server dev
 
 # 生产模式（多进程）
-aurimyth server prod
+aum server prod
 ```
 
 > 📖 **详细配置**：参考 [03-server-deployment.md](./03-server-deployment.md)
@@ -783,13 +809,13 @@ class MyApp(FoundationApp):
 alembic init -t async alembic
 
 # 生成迁移
-aurimyth migrate make -m "Add users table"
+aum migrate make -m "Add users table"
 
 # 执行迁移
-aurimyth migrate up
+aum migrate up
 
 # 查看状态
-aurimyth migrate status
+aum migrate status
 ```
 
 > 📖 **详细说明**：参考 [21-migration-guide.md](./21-migration-guide.md)
@@ -835,25 +861,25 @@ logger.info(f"处理请求 | Trace-ID: {trace_id}")
 # 项目初始化（先用 uv 创建项目）
 uv init . --name my_service --no-package --python 3.13
 uv add "aurimyth-foundation-kit[recommended]"
-aurimyth init -i              # 交互式模式（推荐）
-aurimyth init                 # 默认配置
-aurimyth init my_package      # 顶层包结构
-aurimyth init --docker        # 包含 Docker 配置
+aum init -i              # 交互式模式（推荐）
+aum init                 # 默认配置
+aum init my_package      # 顶层包结构
+aum init --docker        # 包含 Docker 配置
 
 # 代码生成
-aurimyth generate crud user
+aum generate crud user
 
 # 服务器
-aurimyth server dev
-aurimyth server prod
+aum server dev
+aum server prod
 
 # 数据库迁移
-aurimyth migrate make -m "add user"
-aurimyth migrate up
-aurimyth migrate status
+aum migrate make -m "add user"
+aum migrate up
+aum migrate status
 
 # Shell 补全
-aurimyth --install-completion
+aum --install-completion
 ```
 
 > 📖 **详细说明**：参考 [24-cli-commands.md](./24-cli-commands.md)

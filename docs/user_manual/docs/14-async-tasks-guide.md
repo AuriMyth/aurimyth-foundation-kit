@@ -45,17 +45,6 @@ task = send_email.send(
 )
 ```
 
-### 发送并等待（同步）
-
-```python
-# 发送任务并等待结果
-result = await send_email.send_and_wait(
-    email="user@example.com",
-    subject="Hello",
-    content="Test message"
-)
-```
-
 ### 延迟执行
 
 ```python
@@ -72,17 +61,17 @@ send_email.send(email="user@example.com", subject="Hello", content="Message")
 
 ```bash
 # 启动 worker 处理默认队列
-SERVICE_TYPE=worker aurimyth-server run
+aum worker
 
 # 启动 worker 处理特定队列
-SERVICE_TYPE=worker TASK_QUEUE_NAME=emails aurimyth-server run
+aum worker -q emails
 ```
 
 ### 多进程 Worker
 
 ```bash
-# 启动 4 个 worker 进程
-SERVICE_TYPE=worker aurimyth-server prod --workers 4
+# 启动 8 个并发 worker
+aum worker -c 8
 ```
 
 ## 错误处理和重试
@@ -214,18 +203,6 @@ TASK_TIMEOUT=600
 
 ## 监控和调试
 
-### 任务状态
-
-```python
-# 获取任务状态
-task = send_email.send(email="test@example.com", subject="Test", content="Test")
-status = await tm.get_task_status(task.id)
-
-print(f"状态: {status.state}")  # pending, running, success, failure
-print(f"进度: {status.progress}")
-print(f"结果: {status.result}")
-```
-
 ### 任务日志
 
 ```python
@@ -299,21 +276,6 @@ async def smart_retry_task(user_id: str):
         # 永久错误 - 不应该重试
         logger.error(f"用户 {user_id} 不存在")
         return None
-```
-
-### 4. 监控任务队列
-
-```python
-# 定期检查任务队列状态
-@tm.conditional_task(queue_name="monitoring")
-async def check_queue_health():
-    stats = await tm.get_queue_stats()
-    
-    if stats.pending_tasks > 1000:
-        logger.warning(f"队列堆积: {stats.pending_tasks} 个待处理任务")
-    
-    if stats.failed_tasks > 100:
-        logger.error(f"失败任务过多: {stats.failed_tasks}")
 ```
 
 ---

@@ -276,6 +276,16 @@ def dev(
         "-p",
         help="监听端口（默认使用配置文件中的 SERVER_PORT）",
     ),
+    reload_include: list[str] | None = typer.Option(
+        None,
+        "--include",
+        help="追加监控的文件模式（可多次指定，如 --include '*.jinja2'）",
+    ),
+    reload_exclude: list[str] | None = typer.Option(
+        None,
+        "--exclude",
+        help="追加排除的文件模式（可多次指定，如 --exclude 'static/*'）",
+    ),
 ) -> None:
     """启动开发服务器（热重载）。
     
@@ -288,18 +298,16 @@ def dev(
         aurimyth-server dev --app myproject.main:app
         aurimyth-server dev --port 9000
     """
-    from aurimyth.foundation_kit.application.server import ApplicationServer
-    
     app_instance = _get_app_instance(app_path)
     
     # 优先使用命令行参数，否则使用 app 配置
     server_host = host if host is not None else app_instance.config.server.host
     server_port = port if port is not None else app_instance.config.server.port
 
-    # 构建默认监控目录：根目录 + 项目包目录（若存在）
+    # 构建默认监控目录：优先仅监控项目包目录，避免监控根目录导致日志等文件触发重载
     cwd = Path.cwd()
-    reload_dirs: list[str] = [str(cwd)]  # 使用绝对路径，确保 uvicorn 能正确监控
-    
+    reload_dirs: list[str] = []
+
     cfg = None
     try:
         from ..config import get_project_config
@@ -311,12 +319,9 @@ def dev(
     except Exception:
         pass
 
-    # 追加服务名目录（若存在且不同于包名）
-    svc_name = (app_instance.config.service.name or "").strip()
-    if svc_name and svc_name != (cfg.package if cfg and cfg.has_package else ""):
-        svc_path = cwd / svc_name
-        if svc_path.exists():
-            reload_dirs.append(str(svc_path))
+    # 如果没有检测到包目录，则退回到当前目录（单文件/平铺项目）
+    if not reload_dirs:
+        reload_dirs = [str(cwd)]
 
     # 去重
     seen = set()
@@ -332,6 +337,80 @@ def dev(
     typer.echo("   调试模式: ✅")
     typer.echo(f"   监控目录: {reload_dirs}")
     typer.echo(f"   应用模块: {app_module_path}")
+
+    # 在应用启动完成后打印一次服务地址
+    try:
+        app_instance.add_event_handler(
+            "startup",
+            lambda: typer.echo(f"✅ 服务已就绪: http://{server_host}:{server_port}"),
+        )
+    except Exception:
+        pass
+
+    # 默认包含/排除规则（watchfiles 支持）
+    reload_includes = [
+        "*.py",
+        "*.pyi",
+        "*.ini",
+        "*.toml",
+        "*.yaml",
+        "*.yml",
+        "*.json",
+        "*.env",
+        "*.cfg",
+        "*.conf",
+        # 常见模板与静态资源（如需更少重载，可通过 --exclude 精确排除）
+        "*.jinja2",
+        "*.jinja",
+        "*.j2",
+        "*.html",
+        "*.htm",
+        "*.sql",
+        "*.graphql",
+        # 前端常见类型（node_modules 已排除）
+        "*.ts",
+        "*.tsx",
+        "*.js",
+        "*.jsx",
+        "*.vue",
+        "*.css",
+        "*.scss",
+        "*.sass",
+    ]
+    reload_excludes = [
+        "logs/*",
+        "*.log",
+        "*.log.*",
+        "migrations/versions/*",
+        "alembic.ini",
+        "__pycache__/*",
+        ".pytest_cache/*",
+        ".mypy_cache/*",
+        ".ruff_cache/*",
+        ".git/*",
+        ".venv/*",
+        "dist/*",
+        "build/*",
+        "coverage/*",
+        "node_modules/*",
+    ]
+
+    # 追加用户自定义模式
+    if reload_include:
+        reload_includes.extend(reload_include)
+    if reload_exclude:
+        reload_excludes.extend(reload_exclude)
+
+    typer.echo(f"   监控包含: {reload_includes}")
+    typer.echo(f"   监控排除: {reload_excludes}")
+
+    # 提示将使用的热重载实现
+    try:
+        import importlib
+        importlib.import_module("watchfiles")
+        typer.echo("   重载引擎: watchfiles ✅")
+    except Exception:
+        typer.echo("   重载引擎: watchdog/stat ❌  (建议安装: uv add watchfiles)")
     
     try:
         import os as os_module
@@ -345,6 +424,8 @@ def dev(
             port=server_port,
             reload=True,
             reload_dirs=reload_dirs,
+            reload_includes=reload_includes,
+            reload_excludes=reload_excludes,
             log_level="info",
         )
     except KeyboardInterrupt:

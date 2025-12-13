@@ -108,6 +108,7 @@ class DatabaseManager:
         max_overflow: int | None = None,
         pool_timeout: int | None = None,
         pool_recycle: int | None = None,
+        isolation_level: str | None = None,
     ) -> None:
         """初始化数据库连接。
         
@@ -118,12 +119,14 @@ class DatabaseManager:
             max_overflow: 最大溢出连接数
             pool_timeout: 连接超时时间（秒）
             pool_recycle: 连接回收时间（秒）
+            isolation_level: 事务隔离级别
         """
         if self._initialized:
             logger.warning("数据库管理器已初始化，跳过重复初始化")
             return
         
         # 使用提供的参数或配置中的默认值
+        db_isolation_level: str | None = None
         if self._config is not None:
             database_url = url or self._config.url
             db_echo = echo if echo is not None else self._config.echo
@@ -131,6 +134,7 @@ class DatabaseManager:
             db_max_overflow = max_overflow or self._config.max_overflow
             db_pool_timeout = pool_timeout or self._config.pool_timeout
             db_pool_recycle = pool_recycle or self._config.pool_recycle
+            db_isolation_level = isolation_level or self._config.isolation_level
         else:
             # 如果没有配置，使用环境变量
             import os
@@ -147,17 +151,25 @@ class DatabaseManager:
             db_max_overflow = max_overflow or int(os.getenv("DB_MAX_OVERFLOW", "10"))
             db_pool_timeout = pool_timeout or int(os.getenv("DB_POOL_TIMEOUT", "30"))
             db_pool_recycle = pool_recycle or int(os.getenv("DB_POOL_RECYCLE", "1800"))
+            db_isolation_level = isolation_level or os.getenv("DATABASE_ISOLATION_LEVEL")
         
-        self._engine = create_async_engine(
-            database_url,
-            echo=db_echo,
-            future=True,
-            pool_pre_ping=True,
-            pool_size=db_pool_size,
-            max_overflow=db_max_overflow,
-            pool_timeout=db_pool_timeout,
-            pool_recycle=db_pool_recycle,
-        )
+        # 构建引擎参数
+        engine_kwargs: dict = {
+            "echo": db_echo,
+            "future": True,
+            "pool_pre_ping": True,
+            "pool_size": db_pool_size,
+            "max_overflow": db_max_overflow,
+            "pool_timeout": db_pool_timeout,
+            "pool_recycle": db_pool_recycle,
+        }
+        
+        # 添加隔离级别（如果配置了）
+        if db_isolation_level:
+            engine_kwargs["isolation_level"] = db_isolation_level
+            logger.info(f"事务隔离级别设置为: {db_isolation_level}")
+        
+        self._engine = create_async_engine(database_url, **engine_kwargs)
         
         self._session_factory = async_sessionmaker(
             self._engine,

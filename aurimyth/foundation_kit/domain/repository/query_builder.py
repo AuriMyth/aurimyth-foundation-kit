@@ -51,6 +51,7 @@ class QueryBuilder[ModelType: Base]:
     支持操作符：__gt、__lt、__gte、__lte、__in、__like、__ilike、__isnull、__ne
     支持复杂条件：and_()、or_()、not_()
     支持关系查询：joinedload()、selectinload()
+    支持悲观锁：for_update()
     """
     
     def __init__(self, model_class: type[ModelType]) -> None:
@@ -66,6 +67,7 @@ class QueryBuilder[ModelType: Base]:
         self._load_options = []
         self._limit = None
         self._offset = None
+        self._for_update: dict[str, bool] | None = None
     
     def filter(self, **kwargs) -> QueryBuilder[ModelType]:
         """添加过滤条件。
@@ -242,6 +244,55 @@ class QueryBuilder[ModelType: Base]:
         
         return self
     
+    def for_update(
+        self,
+        *,
+        nowait: bool = False,
+        skip_locked: bool = False,
+        of: list[str] | None = None,
+    ) -> QueryBuilder[ModelType]:
+        """添加悲观锁（SELECT ... FOR UPDATE）。
+        
+        用于在事务中锁定记录，防止并发修改。
+        
+        Args:
+            nowait: 是否立即返回，不等待锁释放。如果记录被锁定，立即抛出异常。
+            skip_locked: 是否跳过已锁定的记录。适用于队列场景。
+            of: 指定要锁定的列（部分数据库支持）。
+        
+        Returns:
+            QueryBuilder: 查询构建器实例
+        
+        用法:
+            # 基本用法：锁定记录
+            query = repo.query().filter(id=1).for_update()
+            result = await session.execute(query.build())
+            product = result.scalar_one()
+            product.stock -= 1  # 安全修改，其他事务会等待
+            
+            # 不等待：如果被锁定立即抛出异常
+            query = repo.query().filter(id=1).for_update(nowait=True)
+            
+            # 跳过已锁定记录：适用于任务队列
+            query = repo.query().filter(status="pending").for_update(skip_locked=True)
+        
+        注意:
+            - 必须在事务中使用
+            - nowait 和 skip_locked 不能同时使用
+            - 不同数据库支持的参数不同（PostgreSQL 支持所有，MySQL 部分支持，SQLite 不支持）
+        """
+        if nowait and skip_locked:
+            raise ValueError("nowait 和 skip_locked 不能同时使用")
+        
+        self._for_update = {
+            "nowait": nowait,
+            "skip_locked": skip_locked,
+        }
+        if of:
+            self._for_update["of"] = of
+        
+        return self
+    
     def build(self) -> Select:
         """构建查询对象。
         
@@ -268,6 +319,24 @@ class QueryBuilder[ModelType: Base]:
         
         if self._limit is not None:
             query = query.limit(self._limit)
+        
+        # 应用悲观锁
+        if self._for_update is not None:
+            # 构建 for_update 参数
+            of_columns = None
+            if "of" in self._for_update:
+                of_list = self._for_update["of"]
+                of_columns = [
+                    getattr(self._model_class, col)
+                    for col in of_list
+                    if hasattr(self._model_class, col)
+                ]
+            
+            query = query.with_for_update(
+                nowait=self._for_update.get("nowait", False),
+                skip_locked=self._for_update.get("skip_locked", False),
+                of=of_columns if of_columns else None,
+            )
         
         return query
 

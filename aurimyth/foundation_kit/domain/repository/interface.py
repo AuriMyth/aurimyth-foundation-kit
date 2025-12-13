@@ -12,6 +12,8 @@ from aurimyth.foundation_kit.domain.models import Base
 from aurimyth.foundation_kit.domain.pagination import PaginationParams, PaginationResult, SortParams
 
 if TYPE_CHECKING:
+    from typing import Self
+
     from aurimyth.foundation_kit.domain.repository.query_builder import QueryBuilder
 
 
@@ -89,5 +91,16 @@ class IRepository[ModelType: Base](ABC):
     @abstractmethod
     def query(self) -> QueryBuilder[ModelType]:
         """创建查询构建器。"""
+        pass
+    
+    @abstractmethod
+    def with_commit(self) -> Self:
+        """返回强制提交的 Repository 视图。
+        
+        在 auto_commit=False 时，使用此方法可以强制单次操作提交。
+        
+        Returns:
+            Self: 带强制提交标记的 Repository 副本
+        """
         pass
 

@@ -2,6 +2,57 @@
 
 Kit 在 `domain.transaction` 中提供了企业级的事务管理工具。
 
+## Repository 自动提交机制
+
+Foundation Kit 的 Repository 支持智能的自动提交机制，优于 Django 的设计。
+
+### 自动提交行为
+
+| 场景 | 行为 |
+|------|------|
+| 非事务中 + `auto_commit=True`（默认） | 写操作后自动 commit |
+| 非事务中 + `auto_commit=False` | 只 flush，需手动管理或使用 `.with_commit()` |
+| 在事务中（`@transactional` 等） | **永不自动提交**，由事务统一管理 |
+
+### 基本用法
+
+```python
+from aurimyth.foundation_kit.domain.repository.impl import BaseRepository
+
+# 默认行为：非事务中自动提交
+repo = UserRepository(session, User)  # auto_commit=True
+await repo.create({"name": "test"})  # 自动 commit
+
+# 禁用自动提交
+repo = UserRepository(session, User, auto_commit=False)
+await repo.create({"name": "test"})  # 只 flush，不 commit
+
+# 单次强制提交（auto_commit=False 时）
+await repo.with_commit().create({"name": "test2"})  # 强制 commit
+```
+
+### 与事务的配合
+
+```python
+from aurimyth.foundation_kit.domain.transaction import transactional
+
+# 在事务中：无论 auto_commit 是什么，都不会自动提交
+@transactional
+async def create_with_profile(session: AsyncSession):
+    user_repo = UserRepository(session, User)  # auto_commit=True 但不生效
+    profile_repo = ProfileRepository(session, Profile)
+    
+    user = await user_repo.create({"name": "alice"})  # 只 flush
+    await profile_repo.create({"user_id": user.id})  # 只 flush
+    # 事务结束时统一 commit
+    return user
+```
+
+### 设计优势（对比 Django）
+
+- **Django**：每个 `save()` 默认独立事务，容易无意识地失去原子性，需要显式 `atomic()` 包裹
+- **Foundation Kit**：默认自动提交，但**事务上下文自动接管**，用户显式开事务 = 显式要原子性
+
 ## 事务管理工具
 
 ### 1. @transactional 装饰器（最常用）
@@ -262,6 +313,128 @@ async def update_inventory(session: AsyncSession, items):
     for item in items:
         await inventory_repo.deduct(item.product_id, item.quantity)
 ```
+
+### Savepoints（保存点）
+
+保存点允许在事务中设置回滚点，实现部分回滚而不影响整个事务。
+
+```python
+from aurimyth.foundation_kit.domain.transaction import TransactionManager
+
+async def complex_operation(session: AsyncSession):
+    """使用保存点实现部分回滚"""
+    tm = TransactionManager(session)
+    
+    await tm.begin()
+    repo = UserRepository(session)
+    
+    try:
+        # 第一步：创建主记录
+        user = await repo.create({"name": "alice"})
+        
+        # 创建保存点
+        sp_id = await tm.savepoint("before_optional")
+        
+        try:
+            # 第二步：可选操作（可能失败）
+            await risky_operation(session)
+            
+            # 成功：提交保存点
+            await tm.savepoint_commit(sp_id)
+        except RiskyOperationError:
+            # 失败：回滚到保存点，但 user 创建仍然保留
+            await tm.savepoint_rollback(sp_id)
+            logger.warning("可选操作失败，已回滚，继续主流程")
+        
+        # 第三步：继续其他操作（不受保存点回滚影响）
+        await repo.update(user.id, {"status": "active"})
+        
+        await tm.commit()
+        return user
+    except Exception as e:
+        await tm.rollback()
+        raise
+```
+
+**保存点 API**：
+
+| 方法 | 描述 |
+|------|------|
+| `savepoint(name)` | 创建保存点，返回保存点 ID |
+| `savepoint_commit(sp_id)` | 提交保存点（释放保存点，变更生效） |
+| `savepoint_rollback(sp_id)` | 回滚到保存点（撤销保存点后的变更） |
+
+**典型场景**：
+- 批量导入时，某些记录失败不影响其他记录
+- 可选的增强操作失败时降级处理
+- 复杂业务流程中的检查点
+
+### on_commit 回调
+
+注册在事务成功提交后执行的回调函数，适合发送通知、触发后续任务等副作用操作。
+
+```python
+from aurimyth.foundation_kit.domain.transaction import transactional, on_commit
+
+@transactional
+async def create_order(session: AsyncSession, order_data: dict):
+    """创建订单并在提交后发送通知"""
+    repo = OrderRepository(session)
+    order = await repo.create(order_data)
+    
+    # 注册回调：事务成功后执行
+    on_commit(lambda: send_order_notification(order.id))
+    on_commit(lambda: update_inventory_cache(order.items))
+    
+    # 如果后续发生异常导致回滚，回调不会执行
+    await validate_order(order)
+    
+    return order
+    # 事务 commit 后，所有 on_commit 回调按注册顺序执行
+
+def send_order_notification(order_id: str):
+    """同步回调"""
+    notification_service.send(f"订单 {order_id} 已创建")
+
+async def update_inventory_cache(items: list):
+    """异步回调也支持"""
+    await cache.invalidate_inventory(items)
+```
+
+**在 TransactionManager 中使用**：
+
+```python
+from aurimyth.foundation_kit.domain.transaction import TransactionManager
+
+async def manual_with_callback(session: AsyncSession):
+    tm = TransactionManager(session)
+    
+    await tm.begin()
+    try:
+        user = await create_user(session)
+        
+        # 注册到 TransactionManager
+        tm.on_commit(lambda: print(f"用户 {user.id} 创建成功"))
+        
+        await tm.commit()  # 提交后执行回调
+    except Exception:
+        await tm.rollback()  # 回滚时回调被清除，不执行
+        raise
+```
+
+**回调特性**：
+
+| 特性 | 描述 |
+|------|------|
+| 执行时机 | 事务成功 `commit()` 后立即执行 |
+| 回滚行为 | 事务回滚时，已注册的回调被清除，不执行 |
+| 执行顺序 | 按注册顺序执行 |
+| 支持类型 | 同步函数和异步函数都支持 |
+
+**最佳实践**：
+- 回调中不要执行关键业务逻辑（事务已提交，回调失败无法回滚）
+- 适合：发送通知、更新缓存、触发异步任务、记录审计日志
+- 回调中如有数据库操作，应开启新事务
 
 ### 异常处理中的事务
 

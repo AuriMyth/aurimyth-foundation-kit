@@ -206,10 +206,237 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             
         except Exception as exc:
             duration = time.time() - start_time
-            logger.error(
-                f"✗ {request.method} {request.url.path} | "
-                f"异常: {type(exc).__name__}: {exc} | "
-                f"耗时: {duration:.3f}s | "
+            # diagnose=True 会自动记录局部变量（request_body_log, client_host, trace_id 等）
+            logger.exception(
+                f"请求处理失败: {request.method} {request.url.path} | "
+                f"耗时: {duration:.3f}s | Trace-ID: {trace_id}"
+            )
+            raise
+
+
+class WebSocketLoggingMiddleware:
+    """WebSocket 日志中间件。
+    
+    记录 WebSocket 连接生命周期和消息收发（可选）。
+    
+    使用示例:
+        from aurimyth.foundation_kit.application.middleware.logging import WebSocketLoggingMiddleware
+        
+        app.add_middleware(WebSocketLoggingMiddleware, log_messages=True)
+    """
+    
+    def __init__(
+        self,
+        app,
+        *,
+        log_messages: bool = False,
+        max_message_length: int = 500,
+    ) -> None:
+        """初始化 WebSocket 日志中间件。
+        
+        Args:
+            app: ASGI 应用
+            log_messages: 是否记录消息内容（默认 False，注意性能和敏感数据）
+            max_message_length: 消息内容最大记录长度
+        """
+        self.app = app
+        self.log_messages = log_messages
+        self.max_message_length = max_message_length
+    
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "websocket":
+            await self.app(scope, receive, send)
+            return
+        
+        # 获取或生成 trace_id
+        headers = dict(scope.get("headers", []))
+        trace_id = (
+            headers.get(b"x-trace-id", b"").decode() or
+            headers.get(b"x-request-id", b"").decode() or
+            str(uuid.uuid4())
+        )
+        set_trace_id(trace_id)
+        
+        path = scope.get("path", "/")
+        client = scope.get("client")
+        client_host = f"{client[0]}:{client[1]}" if client else "unknown"
+        
+        start_time = time.time()
+        message_count = {"sent": 0, "received": 0}
+        
+        async def logging_receive():
+            message = await receive()
+            msg_type = message.get("type", "")
+            
+            if msg_type == "websocket.connect":
+                logger.info(
+                    f"WS → 连接建立: {path} | "
+                    f"客户端: {client_host} | Trace-ID: {trace_id}"
+                )
+            elif msg_type == "websocket.disconnect":
+                duration = time.time() - start_time
+                logger.info(
+                    f"WS ← 连接关闭: {path} | "
+                    f"时长: {duration:.1f}s | "
+                    f"收/发: {message_count['received']}/{message_count['sent']} | "
+                    f"Trace-ID: {trace_id}"
+                )
+            elif msg_type == "websocket.receive":
+                message_count["received"] += 1
+                if self.log_messages:
+                    text = message.get("text") or message.get("bytes", b"").decode("utf-8", errors="replace")
+                    if len(text) > self.max_message_length:
+                        text = text[:self.max_message_length] + "..."
+                    logger.debug(f"WS → 收到: {path} | {text}")
+            
+            return message
+        
+        async def logging_send(message):
+            msg_type = message.get("type", "")
+            
+            if msg_type == "websocket.send":
+                message_count["sent"] += 1
+                if self.log_messages:
+                    text = message.get("text") or message.get("bytes", b"").decode("utf-8", errors="replace")
+                    if len(text) > self.max_message_length:
+                        text = text[:self.max_message_length] + "..."
+                    logger.debug(f"WS ← 发送: {path} | {text}")
+            elif msg_type == "websocket.close":
+                code = message.get("code", 1000)
+                reason = message.get("reason", "")
+                duration = time.time() - start_time
+                log_level = "warning" if code != 1000 else "info"
+                logger.log(
+                    log_level.upper(),
+                    f"WS ← 服务关闭: {path} | "
+                    f"Code: {code} | 原因: {reason or '正常'} | "
+                    f"时长: {duration:.1f}s | Trace-ID: {trace_id}"
+                )
+            
+            await send(message)
+        
+        try:
+            await self.app(scope, logging_receive, logging_send)
+        except Exception as exc:
+            duration = time.time() - start_time
+            logger.exception(
+                f"WS ✖ 异常: {path} | "
+                f"时长: {duration:.1f}s | "
+                f"收/发: {message_count['received']}/{message_count['sent']} | "
+                f"Trace-ID: {trace_id}"
+            )
+            raise
+
+
+class WebSocketLoggingMiddleware:
+    """WebSocket 日志中间件。
+    
+    记录 WebSocket 连接生命周期和消息收发（可选）。
+    
+    使用示例:
+        from aurimyth.foundation_kit.application.middleware.logging import WebSocketLoggingMiddleware
+        
+        app.add_middleware(WebSocketLoggingMiddleware, log_messages=True)
+    """
+    
+    def __init__(
+        self,
+        app,
+        *,
+        log_messages: bool = False,
+        max_message_length: int = 500,
+    ) -> None:
+        """初始化 WebSocket 日志中间件。
+        
+        Args:
+            app: ASGI 应用
+            log_messages: 是否记录消息内容（默认 False，注意性能和敏感数据）
+            max_message_length: 消息内容最大记录长度
+        """
+        self.app = app
+        self.log_messages = log_messages
+        self.max_message_length = max_message_length
+    
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "websocket":
+            await self.app(scope, receive, send)
+            return
+        
+        # 获取或生成 trace_id
+        headers = dict(scope.get("headers", []))
+        trace_id = (
+            headers.get(b"x-trace-id", b"").decode() or
+            headers.get(b"x-request-id", b"").decode() or
+            str(uuid.uuid4())
+        )
+        set_trace_id(trace_id)
+        
+        path = scope.get("path", "/")
+        client = scope.get("client")
+        client_host = f"{client[0]}:{client[1]}" if client else "unknown"
+        
+        start_time = time.time()
+        message_count = {"sent": 0, "received": 0}
+        
+        async def logging_receive():
+            message = await receive()
+            msg_type = message.get("type", "")
+            
+            if msg_type == "websocket.connect":
+                logger.info(
+                    f"WS → 连接: {path} | "
+                    f"客户端: {client_host} | Trace-ID: {trace_id}"
+                )
+            elif msg_type == "websocket.disconnect":
+                duration = time.time() - start_time
+                logger.info(
+                    f"WS ← 断开: {path} | "
+                    f"时长: {duration:.1f}s | "
+                    f"收/发: {message_count['received']}/{message_count['sent']} | "
+                    f"Trace-ID: {trace_id}"
+                )
+            elif msg_type == "websocket.receive":
+                message_count["received"] += 1
+                if self.log_messages:
+                    text = message.get("text") or message.get("bytes", b"").decode("utf-8", errors="replace")
+                    if len(text) > self.max_message_length:
+                        text = text[:self.max_message_length] + "..."
+                    logger.debug(f"WS → 收: {path} | {text}")
+            
+            return message
+        
+        async def logging_send(message):
+            msg_type = message.get("type", "")
+            
+            if msg_type == "websocket.send":
+                message_count["sent"] += 1
+                if self.log_messages:
+                    text = message.get("text") or message.get("bytes", b"").decode("utf-8", errors="replace")
+                    if len(text) > self.max_message_length:
+                        text = text[:self.max_message_length] + "..."
+                    logger.debug(f"WS ← 发: {path} | {text}")
+            elif msg_type == "websocket.close":
+                code = message.get("code", 1000)
+                reason = message.get("reason", "")
+                duration = time.time() - start_time
+                log_level = "warning" if code != 1000 else "info"
+                logger.log(
+                    log_level.upper(),
+                    f"WS × 关闭: {path} | "
+                    f"Code: {code}{' | 原因: ' + reason if reason else ''} | "
+                    f"时长: {duration:.1f}s | Trace-ID: {trace_id}"
+                )
+            
+            await send(message)
+        
+        try:
+            await self.app(scope, logging_receive, logging_send)
+        except Exception as exc:
+            duration = time.time() - start_time
+            logger.exception(
+                f"WS ✖ 异常: {path} | "
+                f"时长: {duration:.1f}s | "
+                f"收/发: {message_count['received']}/{message_count['sent']} | "
                 f"Trace-ID: {trace_id}"
             )
             raise
@@ -217,11 +444,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 __all__ = [
     "RequestLoggingMiddleware",
+    "WebSocketLoggingMiddleware",
     "log_request",
 ]
-
-
-
-
 
 

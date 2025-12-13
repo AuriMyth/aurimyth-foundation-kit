@@ -8,6 +8,7 @@
 - aum worker            运行任务队列 Worker
 - aum migrate           数据库迁移
 - aum docker            Docker 配置生成
+- aum docs              生成/更新项目文档
 
 使用示例：
     aum init                      # 初始化项目
@@ -16,6 +17,7 @@
     aum scheduler                 # 独立运行调度器
     aum worker                    # 运行 Worker
     aum migrate up                # 执行数据库迁移
+    aum docs all --force          # 更新所有文档
 """
 
 from __future__ import annotations
@@ -52,8 +54,9 @@ def _get_app() -> typer.Typer:
         ) -> None:
             """AuriMyth Foundation Kit - 现代化微服务基础架构框架。"""
             if version:
-                from aurimyth.foundation_kit import __version__
                 from rich.console import Console
+
+                from aurimyth.foundation_kit import __version__
                 console = Console()
                 console.print(f"[bold cyan]AuriMyth Foundation Kit[/bold cyan] v{__version__}")
                 raise typer.Exit()
@@ -61,7 +64,9 @@ def _get_app() -> typer.Typer:
     if not _registered:
         _registered = True
         # 延迟导入子命令
+        from .add import app as add_app
         from .docker import app as docker_app
+        from .docs import app as docs_app
         from .generate import app as generate_app
         from .init import init
         from .migrate import app as migrate_app
@@ -70,12 +75,14 @@ def _get_app() -> typer.Typer:
         from .worker import app as worker_app
 
         app.command(name="init", help="🎯 初始化项目脚手架")(init)
+        app.add_typer(add_app, name="add", help="➕ 添加可选模块")
         app.add_typer(generate_app, name="generate", help="⚡ 代码生成器")
         app.add_typer(server_app, name="server", help="🖥️  服务器管理")
         app.add_typer(scheduler_app, name="scheduler", help="🕐 独立运行调度器")
         app.add_typer(worker_app, name="worker", help="⚙️  运行任务队列 Worker")
         app.add_typer(migrate_app, name="migrate", help="🗃️  数据库迁移")
         app.add_typer(docker_app, name="docker", help="🐳 Docker 配置")
+        app.add_typer(docs_app, name="docs", help="📚 生成/更新项目文档")
     
     return app
 

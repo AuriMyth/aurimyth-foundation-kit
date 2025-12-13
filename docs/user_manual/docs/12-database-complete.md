@@ -114,6 +114,7 @@ class UserRepository(BaseRepository[User]):
     # - update(id: str, data: dict) -> User
     # - delete(id: str) -> bool
     # - count(**kwargs) -> int
+    # - with_commit() -> Self  # 强制提交
     
     # 自定义查询方法
     async def get_by_email(self, email: str) -> User | None:
@@ -134,6 +135,36 @@ class UserRepository(BaseRepository[User]):
             )
         )
 ```
+
+### 自动提交机制
+
+BaseRepository 支持智能的自动提交机制：
+
+```python
+# 默认行为：auto_commit=True，非事务中自动提交
+repo = UserRepository(session, User)
+await repo.create({"name": "test"})  # 自动 commit
+
+# 禁用自动提交
+repo = UserRepository(session, User, auto_commit=False)
+await repo.create({"name": "test"})  # 只 flush，不 commit
+
+# 单次强制提交
+await repo.with_commit().create({"name": "test2"})  # 强制 commit
+
+# 在事务中：无论 auto_commit 是什么，都不会自动提交
+@transactional
+async def create_users(session):
+    repo = UserRepository(session, User)  # auto_commit=True 但不生效
+    await repo.create({"name": "a"})  # 只 flush
+    await repo.create({"name": "b"})  # 只 flush
+    # 事务结束时统一 commit
+```
+
+**自动提交规则**：
+- `auto_commit=True`（默认）：非事务中自动 commit
+- `auto_commit=False`：只 flush，需使用 `.with_commit()` 或手动管理
+- 在事务中：永不自动提交，由事务统一管理
 
 ## 在 API 中使用
 
@@ -439,6 +470,118 @@ await repo.bulk_delete(ids_to_delete)
 ```
 
 ## 高级特性
+
+### SELECT FOR UPDATE（行级锁）
+
+在并发场景下锁定查询的行，防止其他事务修改。
+
+```python
+from aurimyth.foundation_kit.domain.repository.query_builder import QueryBuilder
+
+class AccountRepository(BaseRepository[Account]):
+    async def get_for_update(self, account_id: str) -> Account | None:
+        """获取并锁定账户记录"""
+        qb = QueryBuilder(Account)
+        query = qb.filter(Account.id == account_id).for_update().build()
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+    
+    async def get_for_update_nowait(self, account_id: str) -> Account | None:
+        """获取并锁定，如果已被锁定则立即失败"""
+        qb = QueryBuilder(Account)
+        query = qb.filter(Account.id == account_id).for_update(nowait=True).build()
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+    
+    async def get_for_update_skip_locked(self, account_ids: list[str]) -> list[Account]:
+        """获取并锁定，跳过已被锁定的行"""
+        qb = QueryBuilder(Account)
+        query = qb.filter(Account.id.in_(account_ids)).for_update(skip_locked=True).build()
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+```
+
+**for_update 参数**：
+
+| 参数 | 描述 |
+|------|------|
+| `nowait=True` | 如果行已被锁定，立即报错而不是等待 |
+| `skip_locked=True` | 跳过已被锁定的行（常用于队列场景） |
+| `of=(Column,...)` | 指定锁定的列（用于 JOIN 场景） |
+
+**典型用例：转账操作**：
+
+```python
+from aurimyth.foundation_kit.domain.transaction import transactional
+
+@transactional
+async def transfer_money(session: AsyncSession, from_id: str, to_id: str, amount: float):
+    """转账：使用行锁防止并发问题"""
+    repo = AccountRepository(session)
+    
+    # 锁定两个账户（按 ID 顺序锁定避免死锁）
+    ids = sorted([from_id, to_id])
+    
+    qb = QueryBuilder(Account)
+    query = qb.filter(Account.id.in_(ids)).for_update().build()
+    result = await session.execute(query)
+    accounts = {a.id: a for a in result.scalars().all()}
+    
+    from_account = accounts[from_id]
+    to_account = accounts[to_id]
+    
+    if from_account.balance < amount:
+        raise InsufficientBalanceError()
+    
+    from_account.balance -= amount
+    to_account.balance += amount
+    
+    # 事务提交后释放锁
+```
+
+**注意事项**：
+- `nowait` 和 `skip_locked` 互斥，不能同时使用
+- FOR UPDATE 必须在事务中使用
+- 按固定顺序锁定多行以避免死锁
+
+### 事务隔离级别配置
+
+通过环境变量配置数据库的默认事务隔离级别：
+
+```bash
+# .env
+DATABASE_ISOLATION_LEVEL=REPEATABLE READ
+```
+
+**支持的隔离级别**：
+
+| 隔离级别 | 说明 |
+|----------|------|
+| `READ UNCOMMITTED` | 最低隔离，可读未提交数据（脏读） |
+| `READ COMMITTED` | 只读已提交数据（PostgreSQL/Oracle 默认） |
+| `REPEATABLE READ` | 可重复读，同一事务内读取结果一致（MySQL 默认） |
+| `SERIALIZABLE` | 最高隔离，完全串行化执行 |
+| `AUTOCOMMIT` | 每条语句自动提交 |
+
+**配置示例**：
+
+```python
+from aurimyth.foundation_kit.infrastructure.database import DatabaseConfig
+
+# 通过配置对象
+ config = DatabaseConfig(
+    database_url="postgresql+asyncpg://...",
+    isolation_level="REPEATABLE READ"
+)
+
+# 或通过环境变量
+DATABASE_ISOLATION_LEVEL=SERIALIZABLE
+```
+
+**选择建议**：
+- 大多数场景：`READ COMMITTED`（平衡性能和一致性）
+- 报表/统计查询：`REPEATABLE READ`（保证读取一致性）
+- 金融交易：`SERIALIZABLE`（最强一致性，性能较低）
 
 ### 自定义查询条件
 

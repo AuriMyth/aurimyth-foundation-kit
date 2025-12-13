@@ -153,25 +153,33 @@ class UserRepository(BaseRepository[User]):
 
 ### Models 层（models/）
 
-定义数据模型。
+定义数据模型。推荐使用 Kit 提供的预定义基类。
 
 ```python
 # models/user.py
-from aurimyth.foundation_kit.domain.models.base import Base, GUID
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
+from aurimyth.foundation_kit.domain.models import UUIDAuditableStateModel
 
-class User(Base):
+class User(UUIDAuditableStateModel):
+    """用户模型。
+    
+    继承 UUIDAuditableStateModel 自动获得：
+    - id: UUID 主键
+    - created_at: 创建时间
+    - updated_at: 更新时间
+    - deleted_at: 软删除时间戳
+    """
     __tablename__ = "users"
     
-    id: Mapped[str] = mapped_column(GUID, primary_key=True)
     username: Mapped[str] = mapped_column(String(50), unique=True)
     email: Mapped[str] = mapped_column(String(100), unique=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 ```
 
 **职责**：
 - SQLAlchemy 模型定义
 - 数据库字段映射
-- 关系定义
+- 不推荐定义 relationship（使用贫血模型 + Repository 模式）
 
 ### Schemas 层（schemas/）
 
@@ -329,26 +337,30 @@ async def get_user(
 
 ## 异常处理
 
-### 集中异常定义
+### 自定义异常
+
+异常必须继承 Foundation Kit 的异常类：
 
 ```python
 # exceptions/custom_errors.py
-from aurimyth.foundation_kit.application.errors import BaseAppError
+from aurimyth.foundation_kit.application.errors import (
+    NotFoundError,
+    UnauthorizedError,
+)
 
-class UserNotFoundError(BaseAppError):
+class UserNotFoundError(NotFoundError):
+    """用户不存在异常。"""
     def __init__(self, user_id: str):
         super().__init__(
             message=f"用户 {user_id} 不存在",
-            code=404,
-            error_code="USER_NOT_FOUND"
+            resource=user_id,
         )
 
-class InvalidCredentialsError(BaseAppError):
+class InvalidCredentialsError(UnauthorizedError):
+    """身份验证失败异常。"""
     def __init__(self):
         super().__init__(
             message="用户名或密码错误",
-            code=401,
-            error_code="INVALID_CREDENTIALS"
         )
 ```
 

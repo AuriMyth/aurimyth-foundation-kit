@@ -9,6 +9,16 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# 支持的事务隔离级别
+ISOLATION_LEVELS = (
+    "READ UNCOMMITTED",
+    "READ COMMITTED",
+    "REPEATABLE READ",
+    "SERIALIZABLE",
+    "AUTOCOMMIT",
+)
+
+
 class DatabaseConfig(BaseSettings):
     """数据库基础设施配置。
     
@@ -41,6 +51,10 @@ class DatabaseConfig(BaseSettings):
         default=1800,
         description="连接回收时间（秒）"
     )
+    isolation_level: str | None = Field(
+        default=None,
+        description="事务隔离级别: READ UNCOMMITTED / READ COMMITTED / REPEATABLE READ / SERIALIZABLE / AUTOCOMMIT"
+    )
     
     model_config = SettingsConfigDict(
         env_prefix="DATABASE_",
@@ -50,6 +64,7 @@ class DatabaseConfig(BaseSettings):
 
 __all__ = [
     "DatabaseConfig",
+    "ISOLATION_LEVELS",
 ]
 
 

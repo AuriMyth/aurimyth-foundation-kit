@@ -321,10 +321,48 @@ class MigrationComponent(Component):
         pass
 
 
+class AdminConsoleComponent(Component):
+    """管理后台组件（SQLAdmin Admin Console）。
+
+    配置选项（环境变量前缀 ADMIN_ / ADMIN_AUTH_）：
+    - ADMIN_ENABLED: 是否启用（默认 False）
+    - ADMIN_PATH: 后台路径（默认 /api/admin-console）
+    - ADMIN_DATABASE_URL: 同步数据库 URL（可选）
+    - ADMIN_AUTH_MODE: basic/bearer/none/custom/jwt
+    - ADMIN_AUTH_*: 认证参数
+
+    注意：sqladmin 通常要求同步 SQLAlchemy Engine。
+    """
+
+    name = ComponentName.ADMIN_CONSOLE
+    enabled = True
+    depends_on: ClassVar[list[str]] = [ComponentName.DATABASE]
+
+    def can_enable(self, config: BaseConfig) -> bool:
+        return self.enabled and bool(getattr(getattr(config, "admin", None), "enabled", False))
+
+    async def setup(self, app: FoundationApp, config: BaseConfig) -> None:
+        try:
+            from aurimyth.foundation_kit.contrib.admin_console import install_admin_console
+
+            install_admin_console(app, config)
+        except ImportError as e:
+            logger.error(f"管理后台启用失败：缺少依赖（请安装 aurimyth-foundation-kit[admin]）: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"管理后台初始化失败: {e}")
+            raise
+
+    async def teardown(self, app: FoundationApp) -> None:
+        # SQLAdmin 路由挂载后无需额外 teardown
+        pass
+
+
 # 设置默认组件
 FoundationApp.components = [
     DatabaseComponent,
     MigrationComponent,
+    AdminConsoleComponent,
     CacheComponent,
     TaskComponent,
     SchedulerComponent,
@@ -332,6 +370,7 @@ FoundationApp.components = [
 
 
 __all__ = [
+    "AdminConsoleComponent",
     "CacheComponent",
     "DatabaseComponent",
     "MigrationComponent",

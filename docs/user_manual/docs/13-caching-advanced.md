@@ -22,14 +22,14 @@ async def get_user_profile(user_id: str):
 ### 缓存失效
 
 ```python
-# 手动清除缓存
+# 手动清除单个缓存
 await cache.delete("user:123")
 
-# 清除前缀匹配的所有缓存
-await cache.delete_pattern("user:*")
+# 清除多个缓存
+await cache.delete("user:123", "user:456")
 
 # 清除所有缓存
-await cache.flush_all()
+await cache.clear()
 ```
 
 ### 缓存配置
@@ -133,14 +133,14 @@ async def get_user_count():
     await cache.set(cache_key, count, expire=300)
     return count
 
-async def increment_user_count():
+async def update_user_count():
+    """更新用户计数缓存。"""
     cache_key = "users:count"
     
-    # 原子增加
-    await cache.increment(cache_key, 1)
-    
-    # 也要更新数据库
-    await db.increment_count()
+    # 重新计算并更新缓存
+    count = await db.count_users()
+    await cache.set(cache_key, count, expire=300)
+    return count
 ```
 
 ### 热数据预热
@@ -253,20 +253,6 @@ async def get_hot_data(data_id: str):
 ```
 
 ## 监控和调试
-
-### 缓存统计
-
-```python
-async def get_cache_stats():
-    stats = await cache.get_stats()
-    return {
-        "hits": stats.hits,
-        "misses": stats.misses,
-        "hit_rate": stats.hits / (stats.hits + stats.misses),
-        "keys_count": stats.keys_count,
-        "memory_usage": stats.memory_usage,
-    }
-```
 
 ### 缓存日志
 

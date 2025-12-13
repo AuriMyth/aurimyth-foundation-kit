@@ -9,7 +9,7 @@ Infrastructure 层现在仅负责数据库连接管理，完全不依赖 domain 
 from __future__ import annotations
 
 import time
-from typing import Any, Union, cast
+from typing import TYPE_CHECKING, Any, Union, cast
 
 from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from aurimyth.foundation_kit.common.logging import logger
 from aurimyth.foundation_kit.domain.exceptions import VersionConflictError
 from aurimyth.foundation_kit.domain.models import GUID, Base
+from aurimyth.foundation_kit.domain.transaction import _transaction_depth
 from aurimyth.foundation_kit.domain.pagination import (
     PaginationParams,
     PaginationResult,
@@ -24,6 +25,9 @@ from aurimyth.foundation_kit.domain.pagination import (
 )
 from aurimyth.foundation_kit.domain.repository.interface import IRepository
 from aurimyth.foundation_kit.domain.repository.query_builder import QueryBuilder
+
+if TYPE_CHECKING:
+    from typing import Self
 
 
 def _get_model_attr(model_class: type, attr_name: str) -> Any:
@@ -51,15 +55,36 @@ class BaseRepository[ModelType: Base](IRepository[ModelType]):
     - VersionMixin: 乐观锁支持
     - TimestampMixin: 时间戳字段
     
+    自动提交行为：
+    - auto_commit=True（默认）：非事务中自动 commit
+    - auto_commit=False：只 flush，需要手动管理事务或使用 .with_commit()
+    - 在事务中（transactional_context 等）：永远不自动 commit，由事务统一管理
+    
     示例：
         class User(IDMixin, TimestampMixin, AuditableStateMixin, Base):
             __tablename__ = "users"
             name: Mapped[str]
+        
+        # 默认 auto_commit=True，非事务中自动提交
+        repo = UserRepository(session, User)
+        await repo.create({"name": "test"})  # 自动 commit
+        
+        # auto_commit=False，需要手动管理
+        repo = UserRepository(session, User, auto_commit=False)
+        await repo.create({"name": "test"})  # 只 flush
+        await repo.with_commit().create({"name": "test2"})  # 强制 commit
     """
     
-    def __init__(self, session: AsyncSession, model_class: type[ModelType]) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        model_class: type[ModelType],
+        auto_commit: bool = True,
+    ) -> None:
         self._session = session
         self._model_class = model_class
+        self._auto_commit = auto_commit
+        self._force_commit = False  # 单次强制提交标记（用于 with_commit）
         logger.debug(f"初始化 {self.__class__.__name__}")
     
     @property
@@ -69,6 +94,54 @@ class BaseRepository[ModelType: Base](IRepository[ModelType]):
     @property
     def model_class(self) -> type[ModelType]:
         return self._model_class
+    
+    @property
+    def auto_commit(self) -> bool:
+        """是否启用自动提交。"""
+        return self._auto_commit
+    
+    def with_commit(self) -> Self:
+        """返回强制提交的 Repository 视图。
+        
+        在 auto_commit=False 时，使用此方法可以强制单次操作提交。
+        
+        示例：
+            repo = UserRepository(session, User, auto_commit=False)
+            await repo.create({"name": "test"})  # 只 flush
+            await repo.with_commit().create({"name": "test2"})  # 强制 commit
+        
+        Returns:
+            Self: 带强制提交标记的 Repository 副本
+        """
+        clone = self.__class__(
+            self._session,
+            self._model_class,
+            self._auto_commit,
+        )
+        clone._force_commit = True
+        return clone
+    
+    async def _maybe_commit(self) -> None:
+        """根据配置决定是否提交。
+        
+        提交条件：
+        1. 不在显式事务中（transactional_context / @transactional）
+        2. 满足以下任一条件：
+           - _force_commit=True（来自 with_commit()）
+           - _auto_commit=True（默认配置）
+        
+        注意：使用 _transaction_depth 而非 session.in_transaction() 判断，
+        因为 SQLAlchemy 的 autobegin 会让 in_transaction() 在任何 SQL 执行后返回 True，
+        但这不代表用户在显式事务中。
+        """
+        # 在显式事务中（transactional_context / @transactional），由事务统一管理
+        if _transaction_depth.get() > 0:
+            return
+        
+        # 强制提交或自动提交
+        if self._force_commit or self._auto_commit:
+            await self._session.commit()
+            logger.debug("Repository 自动提交")
     
     def query(self) -> QueryBuilder[ModelType]:
         builder = QueryBuilder(self._model_class)
@@ -160,11 +233,13 @@ class BaseRepository[ModelType: Base](IRepository[ModelType]):
         self._session.add(entity)
         await self._session.flush()
         await self._session.refresh(entity)
+        await self._maybe_commit()
         logger.debug(f"添加实体: {entity}")
         return entity
     
     async def create(self, data: dict[str, Any]) -> ModelType:
         entity = self._model_class(**data)
+        # add() 已调用 _maybe_commit，此处无需重复
         return await self.add(entity)
     
     async def update(self, entity: ModelType, data: dict[str, Any] | None = None) -> ModelType:
@@ -187,6 +262,7 @@ class BaseRepository[ModelType: Base](IRepository[ModelType]):
         
         await self._session.flush()
         await self._session.refresh(entity)
+        await self._maybe_commit()
         logger.debug(f"更新实体: {entity}")
         return entity
     
@@ -196,18 +272,22 @@ class BaseRepository[ModelType: Base](IRepository[ModelType]):
                 # 使用 setattr 因为类型检查器不知道动态属性
                 setattr(entity, "deleted_at", int(time.time()))  # noqa: B010
                 await self._session.flush()
+                await self._maybe_commit()
                 logger.debug(f"软删除实体: {entity}")
             elif hasattr(entity, "mark_deleted"):
                 entity.mark_deleted()
                 await self._session.flush()
+                await self._maybe_commit()
                 logger.debug(f"软删除实体（使用方法）: {entity}")
             else:
                 await self._session.delete(entity)
                 await self._session.flush()
+                await self._maybe_commit()
                 logger.debug(f"硬删除实体（无软删除字段）: {entity}")
         else:
             await self._session.delete(entity)
             await self._session.flush()
+            await self._maybe_commit()
             logger.debug(f"硬删除实体: {entity}")
     
     async def mark_deleted(self, entity: ModelType) -> None:
@@ -229,6 +309,7 @@ class BaseRepository[ModelType: Base](IRepository[ModelType]):
         await self._session.flush()
         for entity in entities:
             await self._session.refresh(entity)
+        await self._maybe_commit()
         logger.debug(f"批量创建 {len(entities)} 个实体")
         return entities
     
@@ -240,6 +321,7 @@ class BaseRepository[ModelType: Base](IRepository[ModelType]):
             data_list
         )
         await self._session.flush()
+        await self._maybe_commit()
         logger.debug(f"批量插入 {len(data_list)} 条记录")
     
     async def bulk_update(self, data_list: list[dict[str, Any]],
@@ -254,6 +336,7 @@ class BaseRepository[ModelType: Base](IRepository[ModelType]):
                     raise ValueError(f"批量更新数据缺少索引字段: {field}")
         await self._session.bulk_update_mappings(self._model_class, data_list)
         await self._session.flush()
+        await self._maybe_commit()
         logger.debug(f"批量更新 {len(data_list)} 条记录")
     
     async def bulk_delete(self, filters: dict[str, Any] | None = None) -> int:
@@ -268,6 +351,7 @@ class BaseRepository[ModelType: Base](IRepository[ModelType]):
                     query = query.where(attr == value)
         result = await self._session.execute(query)
         await self._session.flush()
+        await self._maybe_commit()
         deleted_count = cast(Any, result).rowcount
         logger.debug(f"批量删除 {deleted_count} 条记录")
         return deleted_count

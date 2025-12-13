@@ -281,16 +281,6 @@ EVENT_BROKER_URL=redis://localhost:6379/0
 
 ## 监控和调试
 
-### 事件统计
-
-```python
-@bus.subscribe(OrderCreatedEvent)
-async def log_event(event: OrderCreatedEvent):
-    stats = await bus.get_stats()
-    logger.info(f"总事件数: {stats.total_events}")
-    logger.info(f"订阅者数: {stats.subscriber_count}")
-```
-
 ### 事件追踪
 
 ```python

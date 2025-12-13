@@ -188,39 +188,41 @@ python main.py
 
 ```bash
 # 开发服务器（热重载）
-aurimyth-server dev
+aum server dev
+# 或使用短别名
+aum server dev
 
 # 通用运行命令
-aurimyth-server run
+aum server run
 
 # 生产服务器（多进程）
-aurimyth-server prod
+aum server prod
 ```
 
 **方式 2：使用 Python 模块**
 
 ```bash
 # 开发服务器
-python -m aurimyth.foundation_kit.commands.server dev
+uv run aum server dev
 
 # 通用运行
-python -m aurimyth.foundation_kit.commands.server run
+uv run aum server run
 
 # 生产服务器
-python -m aurimyth.foundation_kit.commands.server prod
+uv run aum server prod
 ```
 
 ### dev 命令（开发模式）
 
 ```bash
 # 基础用法
-aurimyth-server dev
+aum server dev
 
 # 指定端口
-aurimyth-server dev --port 9000
+aum server dev --port 9000
 
 # 指定地址和端口
-aurimyth-server dev --host 0.0.0.0 --port 9000
+aum server dev --host 0.0.0.0 --port 9000
 ```
 
 **特点**：
@@ -233,24 +235,24 @@ aurimyth-server dev --host 0.0.0.0 --port 9000
 
 ```bash
 # 基础用法
-aurimyth-server run
+aum server run
 
 # 指定工作进程
-aurimyth-server run --workers 4
+aum server run --workers 4
 
 # 启用热重载
-aurimyth-server run --reload
+aum server run --reload
 
 # 指定热重载监控目录
-aurimyth-server run --reload --reload-dir src --reload-dir tests
+aum server run --reload --reload-dir src --reload-dir tests
 
 # HTTPS
-aurimyth-server run \
+aum server run \
     --ssl-keyfile key.pem \
     --ssl-certfile cert.pem
 
 # 完整示例
-aurimyth-server run \
+aum server run \
     --host 0.0.0.0 \
     --port 8000 \
     --workers 4 \
@@ -278,13 +280,13 @@ aurimyth-server run \
 
 ```bash
 # 基础用法（自动使用 CPU 核心数）
-aurimyth-server prod
+aum server prod
 
 # 指定工作进程数
-aurimyth-server prod --workers 8
+aum server prod --workers 8
 
 # 指定地址和端口
-aurimyth-server prod --host 0.0.0.0 --port 8000
+aum server prod --host 0.0.0.0 --port 8000
 ```
 
 **特点**：
@@ -312,7 +314,7 @@ export SERVER_WORKERS=4
 export SERVER_RELOAD=false
 export DEBUG=false
 
-python -m aurimyth.foundation_kit.commands.server run
+aum server run
 ```
 
 ## 项目 main.py 结构
@@ -376,10 +378,10 @@ if __name__ == "__main__":
 
 ```bash
 # 直接运行
-python main.py
+uv run python main.py
 
-# 或使用 CLI 命令
-python -m aurimyth.foundation_kit.commands.server dev
+# 或使用 CLI 命令（推荐）
+aum server dev
 
 # 或指定 uvicorn
 uvicorn main:app --reload
@@ -390,7 +392,7 @@ uvicorn main:app --reload
 ### Dockerfile
 
 ```dockerfile
-FROM python:3.10-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
@@ -401,7 +403,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 COPY pyproject.toml uv.lock ./
 
 # 安装依赖
-RUN /root/.local/bin/uv sync --frozen
+RUN /root/.local/bin/uv sync --frozen --no-dev
 
 # 复制代码
 COPY . .
@@ -410,7 +412,7 @@ COPY . .
 EXPOSE 8000
 
 # 运行应用
-CMD ["/root/.local/bin/uv", "run", "python", "-m", "aurimyth.foundation_kit.commands.server", "prod"]
+CMD ["/root/.local/bin/uv", "run", "aum", "server", "prod"]
 ```
 
 ### docker-compose.yml
@@ -461,20 +463,19 @@ docker-compose logs -f app
 
 ```bash
 # 使用 CPU 核心数
-python -m aurimyth.foundation_kit.commands.server prod
+aum server prod
 
 # 或指定具体数值
-python -m aurimyth.foundation_kit.commands.server run --workers 8
+aum server run --workers 8
 ```
 
 ### 2. 事件循环优化
 
 ```bash
-# 安装 uvloop
-pip install uvloop
+# uvloop 已通过 uvicorn[standard] 依赖自动安装
 
 # 使用 uvloop
-python -m aurimyth.foundation_kit.commands.server run --loop uvloop --http httptools
+aum server run --loop uvloop --http httptools
 ```
 
 ### 3. 内存管理
@@ -506,7 +507,7 @@ class AppConfig(BaseConfig):
 
 A: 使用 SSL 证书：
 ```bash
-python -m aurimyth.foundation_kit.commands.server run \
+aum server run \
     --ssl-keyfile /path/to/key.pem \
     --ssl-certfile /path/to/cert.pem
 ```

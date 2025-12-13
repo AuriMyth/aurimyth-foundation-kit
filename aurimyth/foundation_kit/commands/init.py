@@ -144,6 +144,7 @@ dev = [
     "pytest-cov>=7.0.0",
     "ruff>=0.14.0",
     "mypy>=1.19.0",
+    "watchfiles>=0.24.0",
 ]
 '''
 
@@ -153,9 +154,12 @@ TEMPLATE_FILE_MAP = {
     "main.py": "main.py.tpl",
     "config.py": "config.py.tpl",
     ".env.example": "env.example.tpl",
+    ".gitignore": "gitignore.tpl",
     "README.md": "README.md.tpl",
     "DEVELOPMENT.md": "DEVELOPMENT.md.tpl",
+    "CLI.md": "CLI.md.tpl",
     "conftest.py": "conftest.py.tpl",
+    "admin_console/__init__.py": "admin_console_init.py.tpl",
 }
 
 # 模块 __init__.py 模板映射
@@ -194,6 +198,77 @@ def _read_module_template(module_name: str) -> str:
             return template_path.read_text(encoding="utf-8")
     # 如果模板文件不存在，抛出错误
     raise FileNotFoundError(f"模块模板文件不存在: {module_name} (查找路径: {MODULE_TEMPLATES_DIR})")
+
+
+# ============================================================
+# Admin Console 模块初始化（可复用）
+# ============================================================
+
+
+def init_admin_console_module(
+    base_path: Path,
+    code_root: Path,
+    import_prefix: str,
+    *,
+    force: bool = False,
+    enable_env: bool = True,
+) -> dict[str, bool]:
+    """初始化 Admin Console 模块到现有项目。
+
+    用于 `aum init`（新项目）和 `aum add admin-console`（已有项目）复用。
+
+    Args:
+        base_path: 项目根目录
+        code_root: 代码根目录（包根或平铺）
+        import_prefix: 导入前缀（如 "app."）
+        force: 强制覆盖已有 admin_console/__init__.py
+        enable_env: 是否尝试在 .env.example 中开启 ADMIN_* 配置
+
+    Returns:
+        dict 包含操作结果:
+        - file_created: 文件是否创建成功
+        - file_existed: 文件是否已存在（且未覆盖）
+        - env_updated: 是否更新了 .env.example
+    """
+    result = {"file_created": False, "file_existed": False, "env_updated": False}
+
+    # 1) 创建 admin_console/ 包目录和 __init__.py
+    admin_pkg = code_root / "admin_console"
+    dest = admin_pkg / "__init__.py"
+    content = _read_template("admin_console/__init__.py")
+    content = content.replace("{import_prefix}", import_prefix)
+
+    if dest.exists() and not force:
+        result["file_existed"] = True
+    else:
+        admin_pkg.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+        result["file_created"] = True
+
+    # 2) 尝试在 .env.example 中开启 ADMIN_* 配置
+    if enable_env:
+        env_example = base_path / ".env.example"
+        if env_example.exists():
+            try:
+                s = env_example.read_text(encoding="utf-8")
+                s2 = (
+                    s.replace("# ADMIN_ENABLED=false", "ADMIN_ENABLED=true")
+                     .replace("# ADMIN_PATH=/api/admin-console", "ADMIN_PATH=/api/admin-console")
+                     .replace("# ADMIN_AUTH_MODE=basic", "ADMIN_AUTH_MODE=basic")
+                     .replace(
+                        "# ADMIN_AUTH_SECRET_KEY=CHANGE_ME_TO_A_RANDOM_SECRET",
+                        "ADMIN_AUTH_SECRET_KEY=CHANGE_ME_TO_A_RANDOM_SECRET",
+                    )
+                     .replace("# ADMIN_AUTH_BASIC_USERNAME=admin", "ADMIN_AUTH_BASIC_USERNAME=admin")
+                     .replace("# ADMIN_AUTH_BASIC_PASSWORD=change_me", "ADMIN_AUTH_BASIC_PASSWORD=change_me")
+                )
+                if s2 != s:
+                    env_example.write_text(s2, encoding="utf-8")
+                    result["env_updated"] = True
+            except Exception:
+                pass  # 静默失败
+
+    return result
 
 
 def _create_directory_structure(base_path: Path, package_name: str | None = None) -> list[str]:
@@ -335,26 +410,13 @@ def _check_python_version() -> bool:
 # ============================================================
 
 
-def _get_project_name_from_pyproject() -> str | None:
-    """从 pyproject.toml 读取项目名称。"""
-    pyproject_path = Path.cwd() / "pyproject.toml"
-    if not pyproject_path.exists():
-        return None
-    try:
-        import tomllib
-        with open(pyproject_path, "rb") as f:
-            data = tomllib.load(f)
-        return data.get("project", {}).get("name")
-    except Exception:
-        return None
-
-
 def _collect_interactive_config() -> dict:
     """交互式收集项目配置（Vue CLI 风格）。"""
     config = {}
 
-    # 从 pyproject.toml 读取项目名作为默认包名
-    default_pkg = _get_project_name_from_pyproject() or ""
+    # 默认包名使用 app（更符合习惯，也更利于 AI/模板稳定生成）
+    # 如需平铺结构请输入 "."
+    default_pkg = "app"
 
     console.print(Panel.fit(
         "[bold cyan]🎯 AuriMyth Foundation Kit[/bold cyan]\n"
@@ -396,16 +458,16 @@ def _collect_interactive_config() -> dict:
     # 3. 缓存类型
     console.print()
     console.print("[bold]📦 缓存[/bold]")
-    console.print("  [dim]1. 内存缓存 (开发用)[/dim]")
-    console.print("  [dim]2. Redis (生产推荐)[/dim]")
+    console.print("  [dim]1. Redis (推荐)[/dim]")
+    console.print("  [dim]2. 内存缓存 (开发用)[/dim]")
     cache_choice = IntPrompt.ask(
         "选择缓存类型",
         default=1,
         choices=["1", "2"],
     )
     config["cache"] = {
-        1: "memory",
-        2: "redis",
+        1: "redis",
+        2: "memory",
     }[cache_choice]
 
     # 4. 服务模式（决定推荐安装的依赖包）
@@ -430,7 +492,13 @@ def _collect_interactive_config() -> dict:
     console.print("[bold]📦 可选功能[/bold]")
     features = []
 
-    if Confirm.ask("  启用对象存储 (S3/本地)", default=False):
+    # 管理后台（Admin Console）
+    config["with_admin_console"] = Confirm.ask(
+        "  启用管理后台 Admin Console (SQLAdmin)",
+        default=True,
+    )
+
+    if Confirm.ask("  启用对象存储 (S3/本地)", default=True):
         features.append("storage")
 
     if Confirm.ask("  启用事件总线", default=False):
@@ -452,7 +520,7 @@ def _collect_interactive_config() -> dict:
     console.print()
     config["with_docker"] = Confirm.ask(
         "[bold]🐳 生成 Docker 配置[/bold]",
-        default=False,
+        default=True,
     )
 
     return config
@@ -484,6 +552,10 @@ def _build_dependency_list(config: dict) -> list[str]:
     for feature in config.get("features", []):
         extras.add(feature)
 
+    # 管理后台（可选扩展）
+    if config.get("with_admin_console", True):
+        extras.add("admin")
+
     # 开发工具
     if config.get("with_dev"):
         extras.add("dev")
@@ -509,6 +581,7 @@ def _show_config_summary(config: dict) -> None:
         ("数据库", config.get("database", "postgresql")),
         ("缓存", config.get("cache", "memory")),
         ("服务模式", config.get("service_mode", "api")),
+        ("管理后台", "是" if config.get("with_admin_console", True) else "否"),
         ("可选功能", ", ".join(config.get("features", [])) or "无"),
         ("开发工具", "是" if config.get("with_dev") else "否"),
         ("Docker", "是" if config.get("with_docker") else "否"),
@@ -530,7 +603,7 @@ def _show_config_summary(config: dict) -> None:
 def init(
     package_name: str = typer.Argument(
         None,
-        help="顶层包名（可选）。如提供则代码生成到该包下",
+        help="顶层包名（默认 app）。如需平铺结构请输入 '.'",
     ),
     no_interactive: bool = typer.Option(
         False,
@@ -585,6 +658,7 @@ def init(
         config["project_name"] = project_name  # 使用当前目录名
         package_name_snake = _to_snake_case(config.get("package_name")) if config.get("package_name") else None
         with_docker = config.get("with_docker", False)
+        with_admin_console = config.get("with_admin_console", True)
 
         # 显示配置摘要并确认
         _show_config_summary(config)
@@ -600,7 +674,14 @@ def init(
         console.print(f"  [cyan]uv add \"{deps[0]}\"[/cyan]")
         console.print()
     else:
-        package_name_snake = _to_snake_case(package_name) if package_name else None
+        # 非交互模式：默认启用 Admin Console
+        with_admin_console = True
+        if package_name == ".":
+            package_name_snake = None
+        elif package_name:
+            package_name_snake = _to_snake_case(package_name)
+        else:
+            package_name_snake = "app"
 
     # 显示标题
     title = project_name
@@ -627,9 +708,13 @@ def init(
         (base_path / "main.py", "main.py", True),  # 总是覆盖，放在根目录
         (code_root / "config.py", "config.py", False),
         (base_path / ".env.example", ".env.example", False),
+        # 管理后台默认模块（可选）—— 现在是包目录
+        (code_root / "admin_console" / "__init__.py", "admin_console/__init__.py", False),
         (base_path / "tests" / "conftest.py", "conftest.py", False),  # tests 放在项目根目录
         (base_path / "README.md", "README.md", True),  # 覆盖 uv init 创建的默认 README
-        (base_path / "DEVELOPMENT.md", "DEVELOPMENT.md", False),  # 开发文档
+        (base_path / "DEVELOPMENT.md", "DEVELOPMENT.md", False),  # 开发指南
+        (base_path / "CLI.md", "CLI.md", False),  # CLI 命令参考
+        (base_path / ".gitignore", ".gitignore", False),  # Git 忽略文件
     ]
 
     import_prefix = f"{package_name_snake}." if package_name_snake else ""
@@ -641,6 +726,10 @@ def init(
     }
 
     for full_path, template_name, always_overwrite in files_to_create:
+        # 若禁用管理后台，则跳过生成 admin_console/
+        if template_name == "admin_console/__init__.py" and not with_admin_console:
+            continue
+
         rel_path = full_path.relative_to(base_path)
         should_write = always_overwrite or force or not full_path.exists()
 
@@ -654,17 +743,17 @@ def init(
         dict_placeholders = {}
         placeholder_counter = [0]  # 使用列表以便在嵌套函数中修改
         
-        def protect_dict(match):
+        def protect_dict(match, *, _dict_placeholders=dict_placeholders, _placeholder_counter=placeholder_counter):
             """保护字典字面量，用占位符替换"""
-            placeholder = f"__DICT_PLACEHOLDER_{placeholder_counter[0]}__"
-            dict_placeholders[placeholder] = match.group(0)
-            placeholder_counter[0] += 1
+            placeholder = f"__DICT_PLACEHOLDER_{_placeholder_counter[0]}__"
+            _dict_placeholders[placeholder] = match.group(0)
+            _placeholder_counter[0] += 1
             return placeholder
         
-        def process_code_block(match):
+        def process_code_block(match, *, _protect_dict=protect_dict):
             """处理代码块，保护其中的字典字面量"""
             code_content = match.group(1)
-            protected_code = re.sub(r'\{"[^"]+":\s*[^}]+\}', protect_dict, code_content, flags=re.DOTALL)
+            protected_code = re.sub(r'\{"[^"]+":\s*[^}]+\}', _protect_dict, code_content, flags=re.DOTALL)
             return '```python' + protected_code + '```'
         
         # 在代码块中保护字典字面量（匹配 {"key": value} 格式）
@@ -672,6 +761,18 @@ def init(
         
         # 格式化模板（替换 {project_name} 等占位符）
         content = content.format(**template_vars)
+
+        # 若启用管理后台，默认在 .env.example 中打开 ADMIN_ENABLED，并给出基础示例
+        if template_name == ".env.example" and with_admin_console:
+            content = content.replace("# ADMIN_ENABLED=false", "ADMIN_ENABLED=true")
+            content = content.replace("# ADMIN_PATH=/api/admin-console", "ADMIN_PATH=/api/admin-console")
+            content = content.replace("# ADMIN_AUTH_MODE=basic", "ADMIN_AUTH_MODE=basic")
+            content = content.replace(
+                "# ADMIN_AUTH_SECRET_KEY=CHANGE_ME_TO_A_RANDOM_SECRET",
+                "ADMIN_AUTH_SECRET_KEY=CHANGE_ME_TO_A_RANDOM_SECRET",
+            )
+            content = content.replace("# ADMIN_AUTH_BASIC_USERNAME=admin", "ADMIN_AUTH_BASIC_USERNAME=admin")
+            content = content.replace("# ADMIN_AUTH_BASIC_PASSWORD=change_me", "ADMIN_AUTH_BASIC_PASSWORD=change_me")
         
         # 恢复字典字面量
         for placeholder, original in dict_placeholders.items():
@@ -714,8 +815,12 @@ def init(
 
     tree = Tree(f"[bold cyan]{project_name}/[/bold cyan]")
     tree.add("[dim].env.example[/dim]")
+    tree.add("[dim].gitignore[/dim]")
     tree.add("[dim]alembic.ini[/dim]")
     tree.add("[dim]pyproject.toml[/dim]")
+    tree.add("[dim]README.md[/dim]")
+    tree.add("[dim]DEVELOPMENT.md[/dim]")
+    tree.add("[dim]CLI.md[/dim]")
     if with_docker:
         tree.add("[dim]Dockerfile[/dim]")
         tree.add("[dim]docker-compose.yml[/dim]")
@@ -736,6 +841,8 @@ def init(
         pkg_branch.add("[blue]models/[/blue]")
         pkg_branch.add("[blue]repositories/[/blue]")
         pkg_branch.add("[blue]schemas/[/blue]")
+        pkg_branch.add("[blue]exceptions/[/blue]")
+        pkg_branch.add("[blue]tasks/[/blue]")
         pkg_branch.add("[blue]schedules/[/blue]")
     else:
         tree.add("[green]config.py[/green]")
@@ -744,6 +851,8 @@ def init(
         tree.add("[blue]models/[/blue]")
         tree.add("[blue]repositories/[/blue]")
         tree.add("[blue]schemas/[/blue]")
+        tree.add("[blue]exceptions/[/blue]")
+        tree.add("[blue]tasks/[/blue]")
         tree.add("[blue]schedules/[/blue]")
 
     migrations_branch = tree.add("[blue]migrations/[/blue]")
@@ -757,6 +866,7 @@ def init(
     console.print("[bold]下一步：[/bold]")
     console.print("  1. 安装开发依赖：")
     console.print("     [cyan]uv sync --group dev[/cyan]")
+    console.print("     [dim]dev 组包含: pytest, pytest-asyncio, pytest-cov, ruff, mypy, watchfiles（用于稳定热重载）[/dim]")
     console.print("  2. 复制并编辑环境变量：")
     console.print("     [cyan]cp .env.example .env[/cyan]")
     console.print("     [dim]# 编辑 .env 配置数据库连接等[/dim]")
@@ -777,4 +887,4 @@ def init(
     console.print("[dim]详细文档: https://github.com/AuriMythNeo/aurimyth-foundation-kit[/dim]")
 
 
-__all__ = ["init"]
+__all__ = ["init", "init_admin_console_module"]

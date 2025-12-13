@@ -181,13 +181,15 @@ API 层 (api/)
 
 ```
 aurimyth-foundation-kit
-├── FastAPI >= 0.100
-├── SQLAlchemy >= 2.0
+├── FastAPI >= 0.122.0
+├── SQLAlchemy >= 2.0.44
+├── pydantic >= 2.12
 ├── loguru (日志)
-├── APScheduler (定时)
-├── pydantic >= 2.0
+├── uvicorn[standard] (ASGI 服务器)
+├── typer (命令行)
+├── APScheduler (定时，可选)
 ├── redis (可选)
-├── asyncpg (PostgreSQL 驱动)
+├── asyncpg (PostgreSQL 驱动，可选)
 └── ...其他基础库
 ```
 

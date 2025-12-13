@@ -13,11 +13,13 @@ from aurimyth.foundation_kit.application.config import BaseConfig
 from aurimyth.foundation_kit.application.constants import MiddlewareName
 from aurimyth.foundation_kit.application.middleware.logging import (
     RequestLoggingMiddleware as StarletteRequestLoggingMiddleware,
+    WebSocketLoggingMiddleware as StarletteWebSocketLoggingMiddleware,
 )
 
 __all__ = [
     "CORSMiddleware",
     "RequestLoggingMiddleware",
+    "WebSocketLoggingMiddleware",
 ]
 
 
@@ -69,8 +71,31 @@ class CORSMiddleware(Middleware):
         )
 
 
+class WebSocketLoggingMiddleware(Middleware):
+    """WebSocket 日志中间件。
+
+    记录 WebSocket 连接生命周期：
+    - 连接建立/断开
+    - 消息收发统计
+    - 异常断开
+    - 链路追踪 ID
+    """
+
+    name = MiddlewareName.WEBSOCKET_LOGGING
+    enabled = True
+    order = 1  # 紧随 HTTP 日志中间件
+
+    def build(self, config: BaseConfig) -> StarletteMiddleware:
+        """构建 WebSocket 日志中间件实例。"""
+        return StarletteMiddleware(
+            StarletteWebSocketLoggingMiddleware,
+            log_messages=config.log.websocket_log_messages,
+        )
+
+
 # 设置默认中间件
 FoundationApp.middlewares = [
     RequestLoggingMiddleware,
+    WebSocketLoggingMiddleware,
     CORSMiddleware,
 ]
